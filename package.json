@@ -1,0 +1,13 @@
+{
+  "name": "channel-keeper",
+  "version": "1.0.0",
+  "description": "Carve channels through terrain to guide flowing water to a target while avoiding contaminants.",
+  "type": "module",
+  "scripts": {
+    "test": "node tests/run-tests.mjs",
+    "test:smoke": "node tests/smoke.mjs",
+    "capture": "node tests/capture.mjs",
+    "start": "node server.js 8080"
+  },
+  "license": "UNLICENSED"
+}
