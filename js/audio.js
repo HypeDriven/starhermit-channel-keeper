@@ -4,6 +4,25 @@
 
 import { makeRng } from './rng.js';
 
+// Authored one-shot samples (sfx/<name>.opus, see sfx/manifest.json) mapped to
+// logical events. Clips are lazy-loaded after the user-gesture unlock; while a
+// clip is loading or unavailable the synthesized sounds below stay in use.
+const SFX_SAMPLES = {
+  ui: 'ui-tick',
+  select: 'menu-select',
+  carve: 'dig-soft',
+  carveHard: 'dig-hard',
+  invalid: 'deny-buzz',
+  release: 'water-release',
+  splash: 'water-splash',
+  deliver: 'well-fill',
+  contaminate: 'water-fouled',
+  undo: 'undo-rewind',
+  win: 'round-win',
+  lose: 'round-lose',
+  achievement: 'achievement-chime',
+};
+
 export class AudioEngine {
   constructor(settings) {
     this.settings = settings;
@@ -14,6 +33,7 @@ export class AudioEngine {
     this.rng = makeRng(0xA0D10, 'audio');
     this.onCaption = null; // (text) => void, for captions/text cues
     this._musicStep = 0;
+    this._sampleCache = new Map(); // basename -> AudioBuffer | null (loading) | false (failed)
   }
 
   /** Must be called from a user gesture. Safe to call repeatedly. */
@@ -98,10 +118,51 @@ export class AudioEngine {
     src.start(t0);
   }
 
+  /** Lazy-fetch/decode/cache an authored sample and play it once it is cached.
+   *  Returns true only when a cached clip was actually started on the effects
+   *  bus; while loading or after a failure the caller falls back to synthesis. */
+  _playSample(name) {
+    if (!this.ctx) return false;
+    const cached = this._sampleCache.get(name);
+    if (cached instanceof AudioBuffer) {
+      const src = this.ctx.createBufferSource();
+      src.buffer = cached;
+      src.connect(this.buses.effects);
+      src.start();
+      return true;
+    }
+    if (cached === undefined) {
+      this._sampleCache.set(name, null); // fetch in flight
+      fetch(`sfx/${name}.opus`)
+        .then((r) => {
+          if (!r.ok) throw new Error(`sfx ${name}: HTTP ${r.status}`);
+          return r.arrayBuffer();
+        })
+        .then((ab) => this.ctx.decodeAudioData(ab))
+        .then((buf) => this._sampleCache.set(name, buf))
+        .catch(() => this._sampleCache.set(name, false)); // keep synthesis
+    }
+    return false;
+  }
+
   /** Map a logical game event to sound + caption. */
   event(name, opts = {}) {
     if (!this.ctx) return;
     const vary = 1 + (this.rng.next() - 0.5) * 0.12; // seeded pitch variant
+    // Captions fire whether an authored sample or synthesis voices the event.
+    switch (name) {
+      case 'carve': this._caption('dig'); break;
+      case 'carveHard': this._caption('heavy dig'); break;
+      case 'invalid': this._caption(opts.reason ? `not allowed: ${opts.reason}` : 'not allowed'); break;
+      case 'release': this._caption('water released'); break;
+      case 'contaminate': this._caption('water contaminated'); break;
+      case 'undo': this._caption('undo'); break;
+      case 'win': this._caption('well filled — round complete'); break;
+      case 'lose': this._caption('round failed'); break;
+      case 'achievement': this._caption('achievement unlocked'); break;
+    }
+    const sample = SFX_SAMPLES[name];
+    if (sample && this._playSample(sample)) return;
     switch (name) {
       case 'ui':
         this._blip(660 * vary, 0.06, { type: 'triangle', gain: 0.08 });
@@ -113,21 +174,17 @@ export class AudioEngine {
       case 'carve':
         this._noise(0.09, { freq: 500 * vary, q: 0.8, gain: 0.22 });
         this._blip(180 * vary, 0.07, { type: 'square', gain: 0.05 });
-        this._caption('dig');
         break;
       case 'carveHard':
         this._noise(0.14, { freq: 300 * vary, q: 1.2, gain: 0.3 });
         this._blip(120 * vary, 0.1, { type: 'square', gain: 0.07 });
-        this._caption('heavy dig');
         break;
       case 'invalid':
         this._blip(140, 0.12, { type: 'sawtooth', gain: 0.08, slide: -40 });
-        this._caption(opts.reason ? `not allowed: ${opts.reason}` : 'not allowed');
         break;
       case 'release':
         this._noise(0.5, { freq: 900, q: 0.4, gain: 0.18 });
         this._blip(220, 0.4, { type: 'sine', gain: 0.12, slide: 160 });
-        this._caption('water released');
         break;
       case 'splash':
         this._noise(0.12, { freq: 1400 * vary, q: 0.6, gain: 0.1 });
@@ -137,26 +194,21 @@ export class AudioEngine {
         break;
       case 'contaminate':
         this._blip(220, 0.25, { type: 'sawtooth', gain: 0.1, slide: -120 });
-        this._caption('water contaminated');
         break;
       case 'undo':
         this._blip(440, 0.08, { type: 'triangle', gain: 0.09, slide: -120 });
-        this._caption('undo');
         break;
       case 'win':
         [523, 659, 784, 1047].forEach((f, i) =>
           this._blip(f, 0.35, { type: 'triangle', gain: 0.12, delay: i * 0.09 }));
-        this._caption('well filled — round complete');
         break;
       case 'lose':
         [330, 262, 196].forEach((f, i) =>
           this._blip(f, 0.3, { type: 'sine', gain: 0.1, delay: i * 0.12 }));
-        this._caption('round failed');
         break;
       case 'achievement':
         [784, 988, 1175].forEach((f, i) =>
           this._blip(f, 0.25, { type: 'sine', gain: 0.1, delay: i * 0.07 }));
-        this._caption('achievement unlocked');
         break;
       case 'tick':
         break; // ambient only; no per-tick sound

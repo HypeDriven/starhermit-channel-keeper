@@ -101,7 +101,7 @@ export function grantAchievement(playerId, key, proof) {
 const MIME = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
   '.json': 'application/json', '.txt': 'text/plain', '.svg': 'image/svg+xml',
-  '.png': 'image/png', '.ico': 'image/x-icon',
+  '.png': 'image/png', '.ico': 'image/x-icon', '.opus': 'audio/ogg',
 };
 
 function json(res, code, obj) {
