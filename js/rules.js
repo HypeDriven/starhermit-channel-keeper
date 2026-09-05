@@ -94,7 +94,7 @@ export function createState(level, sessionSeed) {
     sourceLeft: level.sourceUnits,
     deliveredClean: 0,
     deliveredDirty: 0,
-    maxTicks: level.maxTicks || 400,
+    maxTicks: level.maxTicks ?? 400,
     targetNeed: level.targetNeed,
     parTicks: level.parTicks || 0,
     mechanics: Object.assign({
@@ -117,6 +117,7 @@ export function snapshot(state) {
   c.dirty = state.dirty.slice();
   c.commands = state.commands.slice();
   c.lastEvents = state.lastEvents.slice();
+  c.wHist = state.wHist.slice();
   c.mechanics = Object.assign({}, state.mechanics);
   c.undoStack = [];
   return c;
@@ -131,6 +132,7 @@ export function stateHash(state) {
     s.cells.join(''), s.clean.join(','), s.dirty.join(','),
     s.seq, s.tick, s.phase, s.budget, s.movesUsed, s.invalidCount,
     s.sourceLeft, s.deliveredClean, s.deliveredDirty,
+    s.wHist.join(','), s.stagnant,
     s.terminalReason || '-',
   ];
   const str = parts.join('|');
@@ -251,9 +253,11 @@ export function applyCommand(state, cmd) {
       const snap = state.undoStack.pop();
       const keepUndo = state.undoStack;
       const keepCommands = state.commands;
+      const keepSeq = state.seq; // monotonic counter must not rewind on undo
       Object.assign(state, snap);
       state.undoStack = keepUndo;
       state.commands = keepCommands; // replay log is append-only; undo is not replayed
+      state.seq = keepSeq; // sequence stays monotonic across undo
       events.push({ t: 'undo' });
       break;
     }

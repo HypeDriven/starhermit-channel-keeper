@@ -3,11 +3,16 @@
   "version": "1.0.0",
   "description": "Carve channels through terrain to guide flowing water to a target while avoiding contaminants.",
   "type": "module",
+  "private": true,
   "scripts": {
     "test": "node tests/run-tests.mjs",
+    "test:e2e": "node tests/e2e.mjs",
     "test:smoke": "node tests/smoke.mjs",
     "capture": "node tests/capture.mjs",
     "start": "node server.js 8080"
   },
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "playwright-core": "^1.62.1"
+  }
 }

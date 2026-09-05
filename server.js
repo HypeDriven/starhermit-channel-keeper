@@ -48,6 +48,9 @@ export function validateDailySubmission(dateKey, envelope) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return { ok: false, error: 'bad daily key' };
   const date = new Date(`${day}T12:00:00Z`);
   if (Number.isNaN(date.getTime())) return { ok: false, error: 'bad daily key' };
+  // The daily window is synchronized to platform (UTC) time: only today's
+  // board is open for submission. Past/future days are rejected.
+  if (day !== dailyKey(new Date())) return { ok: false, error: 'daily not open' };
   const level = dailyLevel(date);
   if (envelope.seed !== level.seed) return { ok: false, error: 'seed mismatch' };
   for (const c of envelope.commands) {
@@ -78,10 +81,13 @@ export function submitDailyScore(playerId, dateKey, envelope) {
     ruleset: `rules-v${CONTENT_VERSION}`, when: Date.now(),
   };
   const list = boards.get(dateKey) || [];
-  list.push(entry);
-  list.sort((a, b) => b.score - a.score || a.ticks - b.ticks);
-  boards.set(dateKey, list.slice(0, 200));
-  return { ok: true, rank: list.indexOf(entry) + 1, score: v.score.total };
+  // One ranked row per identity: a re-submission replaces that player's prior
+  // row rather than appending duplicates onto the board.
+  const kept = list.filter((e) => e.playerId !== playerId);
+  kept.push(entry);
+  kept.sort((a, b) => b.score - a.score || a.ticks - b.ticks);
+  boards.set(dateKey, kept.slice(0, 200));
+  return { ok: true, rank: kept.indexOf(entry) + 1, score: v.score.total };
 }
 
 /** Durable, idempotent achievement delivery. */
