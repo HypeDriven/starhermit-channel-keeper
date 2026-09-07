@@ -2,16 +2,55 @@
 
 QA pass 2026-08-20. Static review driven by Qwen3.8 27B on local5090 (HauhauCS Q3_K_P, 32k ctx),
 alongside the game's own unit tests and browser smoke suite. Re-verified and fixed 2026-09-04.
+Second review pass 2026-09-07 (Kimi): four further defects fixed, see "Resolved defects (2026-09-07)".
 
 ## Test results
 
 | Check | Result |
 | --- | --- |
-| `npm test` (`tests/run-tests.mjs`) | 27/27 pass, 0 fail (verified) |
+| `npm test` (`tests/run-tests.mjs`) | 28/28 pass, 0 fail (verified 2026-09-07) |
 | `node --check` on all modules | clean (`js/*.js`, `server.js`, `tests/*.mjs`) |
-| `node tests/e2e.mjs` (headless Chrome, desktop + mobile) | E2E OK — both passes complete clean, exit 0 |
+| `node tests/e2e.mjs` (headless Chrome, desktop + mobile) | E2E OK — both passes complete clean, exit 0 (2026-09-07, incl. new pause-freeze step) |
+| `node tests/smoke.mjs` | SMOKE OK (2026-09-07) |
 
-## Resolved defects
+## Resolved defects (2026-09-07)
+
+### A. Pause overlay did not pause the simulation — RESOLVED
+
+- **Fixed at** `js/main.js` (`loop`). The frame loop called `game.session.advance(dt)` whenever the
+  tab was visible, regardless of open modals, so water kept flowing and the round could be lost
+  while the "Paused" sheet was on screen (violates the spec's `active ↔ paused` transition).
+  The loop now also gates on `!anyOverlayOpen()`; cosmetic rendering continues behind the sheet.
+  Verification: new e2e step "pause freezes the flowing simulation" releases water, pauses
+  mid-flow, asserts `tick` is unchanged after ~4 tick-periods, then asserts it advances after
+  resume (desktop + mobile).
+
+### B. Watch-replay dropped `undo` commands and re-persisted replay state — RESOLVED
+
+- **Fixed at** `js/main.js` (`watchReplay`). The replay watch filtered `undo` out of the command
+  log even though the rules engine replays undo deterministically, so a practice/learn session
+  that used undo replayed to a different final board. The full log is now re-run. Additionally
+  the watch session's `_persist` re-created the cleared resume snapshot mid-replay, making a
+  finished round reappear as "Resume interrupted round"; persistence is now suppressed during
+  watch. Verification: new unit test "replay with undo commands reproduces the live session
+  exactly" (live hash equals `replay()` hash across carve→undo→carve→release→ticks).
+
+### C. Gamepad diagonal press moved the cursor twice — RESOLVED
+
+- **Fixed at** `js/main.js` (`pollGamepad`). `edge('mx', …) || edge('my', …)` short-circuited:
+  when a diagonal was first pressed, the Y edge state was never recorded, so it fired spuriously
+  on the next poll and moved the cursor a second time. Both edges are now sampled every poll.
+
+### D. Duplicate favicon declaration — RESOLVED
+
+- **Fixed at** `index.html`. Both the authored `favicon.svg` and an older inline data-URI
+  placeholder were declared; the placeholder (last in document order) won in most browsers.
+  The data-URI link was removed.
+
+Also: added `LICENSE.md` (PolyForm Noncommercial 1.0.0) per the root instructions, and set
+`package.json` `"license": "SEE LICENSE IN LICENSE.md"` (was `UNLICENSED`).
+
+## Resolved defects (2026-09-04)
 
 All fixes were applied and verified on 2026-09-04.
 

@@ -11,7 +11,7 @@
     "capture": "node tests/capture.mjs",
     "start": "node server.js 8080"
   },
-  "license": "UNLICENSED",
+  "license": "SEE LICENSE IN LICENSE.md",
   "devDependencies": {
     "playwright-core": "^1.62.1"
   }

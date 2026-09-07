@@ -275,6 +275,22 @@ test('replay determinism: same version+seed+commands → identical hash', () => 
   }
 });
 
+test('replay with undo commands reproduces the live session exactly', () => {
+  // The command log is append-only across undo; replaying the full log
+  // (carve, undo, carve, release, ticks) must land on the identical hash.
+  const lv = Object.assign(tiny(), { mechanics: { midFlowCarve: true, undoAllowed: true } });
+  const s = createState(lv, 42);
+  applyCommand(s, cmd('carve', 2, 2));
+  applyCommand(s, cmd('undo'));
+  applyCommand(s, cmd('carve', 1, 2));
+  applyCommand(s, cmd('release'));
+  let guard = lv.maxTicks + 5;
+  while (s.phase === PHASE.FLOWING && guard-- > 0) applyCommand(s, cmd('tick'));
+  assert.ok(s.phase === PHASE.WON || s.phase === PHASE.LOST);
+  const r = replay(lv, 42, s.commands);
+  assert.equal(stateHash(r), stateHash(s));
+});
+
 test('fuzz: malformed commands never crash, hang, or produce NaN', () => {
   const rng = makeRng(777, 'fuzz');
   const lv = JOURNEY[5];

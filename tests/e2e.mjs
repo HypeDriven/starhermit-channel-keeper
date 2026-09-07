@@ -183,6 +183,40 @@ async function runPass(label, contextOpts) {
       await page.waitForSelector('#overlay-pause[hidden]', { state: 'attached' });
     });
 
+    await step('pause freezes the flowing simulation', async () => {
+      // Back in the retried lesson 1 (editing): carve the straight channel,
+      // release, then pause mid-flow and prove the tick counter cannot move.
+      await page.locator('#playfield').focus();
+      for (const k of ['Enter', 'Enter', 'ArrowDown', 'Enter', 'ArrowDown', 'Enter']) {
+        await page.keyboard.press(k);
+      }
+      if (label === 'mobile') await page.click('#tray-release');
+      else await page.keyboard.press('r');
+      await page.waitForFunction(() => window.__ckTest.phase() === 'flowing', null, { timeout: 5000 });
+      if (label === 'mobile') await page.click('#tray-pause');
+      else await page.keyboard.press('Escape');
+      await page.waitForSelector('#overlay-pause:not([hidden])');
+      const t1 = await page.evaluate(() => window.__ckTest.state().tick);
+      await new Promise((r) => setTimeout(r, 900)); // ~4 ticks at the default rate
+      const t2 = await page.evaluate(() => window.__ckTest.state().tick);
+      if (t2 !== t1) throw new Error(`simulation advanced while paused: tick ${t1} → ${t2}`);
+      await page.click('#btn-resume-game');
+      await page.waitForSelector('#overlay-pause[hidden]', { state: 'attached' });
+      // Positive control: after resume the flow advances again.
+      await page.waitForFunction((t) => window.__ckTest.state().tick > t, t1, { timeout: 5000 });
+      // Restore the editing phase for the following steps, whichever came first.
+      if ((await phase()) === 'won' || (await phase()) === 'lost') {
+        await page.waitForSelector('#overlay-results:not([hidden])');
+        await page.click('#btn-retry');
+      } else {
+        if (label === 'mobile') await page.click('#tray-pause');
+        else await page.keyboard.press('Escape');
+        await page.waitForSelector('#overlay-pause:not([hidden])');
+        await page.click('#btn-pause-restart');
+      }
+      await page.waitForFunction(() => window.__ckTest.phase() === 'editing', null, { timeout: 5000 });
+    });
+
     await step('pointer click on canvas carves via raycast', async () => {
       const before = await page.evaluate(() => window.__ckTest.state().movesUsed);
       const box = await page.locator('#game-canvas').boundingBox();

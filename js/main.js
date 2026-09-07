@@ -593,7 +593,11 @@ function pollGamepad() {
   const ay = Math.abs(gp.axes[1]) > 0.5 ? Math.sign(gp.axes[1]) : 0;
   const dpx = (pressed(15) ? 1 : 0) - (pressed(14) ? 1 : 0) || ax;
   const dpy = (pressed(13) ? 1 : 0) - (pressed(12) ? 1 : 0) || ay;
-  if (edge('mx', dpx !== 0) || edge('my', dpy !== 0)) {
+  // Both edge states must be sampled every poll: `a || b` would skip recording
+  // the Y edge whenever the X edge fires, causing a spurious second move.
+  const movedX = edge('mx', dpx !== 0);
+  const movedY = edge('my', dpy !== 0);
+  if (movedX || movedY) {
     game.cursor.x = Math.max(0, Math.min(game.session.state.w - 1, game.cursor.x + dpx));
     game.cursor.y = Math.max(0, Math.min(game.session.state.h - 1, game.cursor.y + dpy));
     updateCursor();
@@ -738,11 +742,15 @@ function updateFallback() {
 function watchReplay() {
   const s = game.session;
   if (!s || game.watching) return;
-  const commands = s.state.commands.filter((c) => c.type !== 'undo');
+  // Undo is part of the deterministic command log (the rules engine replays
+  // it exactly), so the full log is re-run — filtering it would diverge.
+  const commands = s.state.commands.slice();
   closeOverlay('overlay-results');
   const fresh = new Session(game.level, sessionOpts());
-  // Suppress terminal handling during watch.
+  // Suppress terminal handling and persistence during watch: replaying commands
+  // must not recreate the cleared resume snapshot of a finished round.
   fresh.onTerminal = () => {};
+  fresh._persist = () => {};
   game.watching = true;
   const watchSession = game.session;
   game.session = fresh;
@@ -1089,7 +1097,9 @@ function loop(t) {
   requestAnimationFrame(loop);
   const dt = Math.min(100, t - lastFrame);
   lastFrame = t;
-  if (game.session && !game.watching && !document.hidden) {
+  // A modal overlay (pause, settings, help…) freezes solo simulation; cosmetic
+  // rendering below continues so the board stays alive behind the sheet.
+  if (game.session && !game.watching && !document.hidden && !anyOverlayOpen()) {
     const wasFlowing = game.session.phase === PHASE.FLOWING;
     game.session.advance(dt);
     if (wasFlowing || game.session.phase === PHASE.FLOWING) {
