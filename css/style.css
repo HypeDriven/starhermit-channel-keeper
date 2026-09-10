@@ -74,6 +74,17 @@ body.high-contrast {
   text-align: center;
 }
 .tagline { text-align: center; color: var(--dim); margin-top: -0.5rem; }
+.title-art {
+  display: block; max-width: 36rem; max-height: 34vh; object-fit: cover;
+  border-radius: 14px; border: 1px solid #2c3648;
+  box-shadow: 0 0 40px rgba(62, 198, 255, 0.12);
+}
+.title-art[hidden] { display: none; }
+.results-art {
+  width: 100%; max-height: clamp(110px, 22vh, 200px); object-fit: cover;
+  border-radius: var(--radius); border: 1px solid #2c3648;
+}
+.results-art[hidden] { display: none; }
 
 .title-head { text-align: center; margin-top: 4vh; }
 .title-menu { display: flex; flex-direction: column; gap: 0.6rem; max-width: 22rem; }

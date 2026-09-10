@@ -76,5 +76,29 @@
     "seconds": 2,
     "prompt": "A bright three-note wind chime sparkle announcing an unlocked achievement.",
     "event": "achievement"
+  },
+  {
+    "name": "hint-glimmer",
+    "seconds": 1,
+    "prompt": "A soft glassy two-note glimmer, like a small bell tapped twice rising in pitch, gentle and quick.",
+    "event": "hint"
+  },
+  {
+    "name": "spring-dry",
+    "seconds": 2,
+    "prompt": "The last trickle of water from an old iron pipe sputtering and stopping, a final drip echoing in a cave.",
+    "event": "springDry"
+  },
+  {
+    "name": "pause-hush",
+    "seconds": 1,
+    "prompt": "A soft muffled cloth thump with a short low hum fading, like a lid closing gently on a wooden box.",
+    "event": "pause"
+  },
+  {
+    "name": "resume-swell",
+    "seconds": 1,
+    "prompt": "A gentle short upward swell, like a wooden lid lifting with a small breath of air and a light tap.",
+    "event": "resume"
   }
 ]

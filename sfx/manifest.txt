@@ -1,0 +1,20 @@
+# Channel Keeper — SFX manifest (canonical). One clip per line:
+# file | event id (AudioEngine.event name, js/audio.js SFX_SAMPLES) | description of the sound | usage context
+# Clips: MOSS-SoundEffect v2.0, 48 kHz mono Opus 96 kbps VBR, loudness-normalised (-20 LUFS), 100 steps. All clips play one-shot on the effects bus; a seeded synth fallback voices the same event while a clip is loading or missing.
+ui-tick.opus | ui | Short soft plastic button tick, a small click in a quiet room | Cursor moves with arrows/WASD; mode cards and level buttons pressed
+menu-select.opus | select | Gentle two-tone wooden marimba tap confirming a selection | A round starts (startLevel), any mode
+dig-soft.opus | carve | Single scoop of a small shovel into loose dry soil, soft earthy scrape | A soil cell (cost 1) is carved into channel
+dig-hard.opus | carveHard | Heavy shovel strike into compacted banded clay, dull gritty crunch | A packed-clay cell (cost 2) is carved; renderer adds a small shake
+deny-buzz.opus | invalid | Short dull error buzz, like a low electric doorbell refusing entry | Illegal carve (rock, spring, well, already open, no budget), double release, refused undo
+water-release.opus | release | Sluice gate opening, sustained gush of water pouring into an earthen channel | Release pressed: phase editing -> flowing
+water-splash.opus | splash | Small water splash, droplets landing in a shallow pool | Reserved: bound in SFX_SAMPLES, no rules event emits it yet
+well-fill.opus | deliver | Bright droplet plink echoing inside a stone well as water arrives | Each tick in which any water units enter the well
+water-fouled.opus | contaminate | Sour gurgling sizzle of clean water turning murky in a drain | Clean water enters a foul pocket and turns dirty (assertive announcement too)
+undo-rewind.opus | undo | Quick tape-rewind whoosh sliding downward in pitch | Undo accepted (Learn and Practice only)
+round-win.opus | win | Cheerful rising bell arpeggio celebrating a well filled with clean water | Terminal target-filled; plays as the results sheet opens
+round-lose.opus | lose | Soft descending mallet phrase, disappointed but gentle | Terminal settled-dry, timeout or abandoned
+achievement-chime.opus | achievement | Bright three-note wind-chime sparkle | An achievement key unlocks for the first time (applyResults)
+hint-glimmer.opus | hint | Soft glassy two-note glimmer, a small bell tapped twice rising in pitch | Hint pressed (H / Y / tray) and a next dig is highlighted with the green ghost
+spring-dry.opus | springDry | Last trickle from an old iron pipe sputtering to a stop, final drip echoing in a cave | First tick on which sourceLeft reaches 0 (toast "The spring has run dry.")
+pause-hush.opus | pause | Soft muffled cloth thump with a short low hum fading, like a lid closing on a wooden box | Pause sheet opens (Esc / Start / Pause button)
+resume-swell.opus | resume | Gentle short upward swell, a lid lifting with a small breath of air and a light tap | Pause sheet closes via Resume / Esc

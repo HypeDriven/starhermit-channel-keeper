@@ -36,6 +36,8 @@
       <h1 id="title-h" class="logo">Channel Keeper</h1>
       <p class="tagline">Carve the earth. Guide the water. Keep it clean.</p>
     </header>
+    <img id="title-art" class="title-art" src="assets/key-art.webp" alt=""
+         onerror="this.hidden=true" decoding="async">
     <nav class="title-menu" aria-label="Main menu">
       <button id="btn-play" class="btn btn-primary btn-big">Play</button>
       <button id="btn-resume" class="btn" hidden>Resume interrupted round</button>
@@ -175,6 +177,7 @@
   <div id="overlay-results" class="overlay" hidden role="dialog" aria-modal="true" aria-labelledby="results-h">
     <div class="sheet sheet-wide">
       <h2 id="results-h">Round complete</h2>
+      <img id="results-art" class="results-art" alt="" hidden onerror="this.hidden=true" decoding="async">
       <p id="results-reason" class="dim"></p>
       <table class="score-table" aria-label="Score breakdown">
         <tbody>

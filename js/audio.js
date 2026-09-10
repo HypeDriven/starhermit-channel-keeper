@@ -21,6 +21,10 @@ const SFX_SAMPLES = {
   win: 'round-win',
   lose: 'round-lose',
   achievement: 'achievement-chime',
+  hint: 'hint-glimmer',
+  springDry: 'spring-dry',
+  pause: 'pause-hush',
+  resume: 'resume-swell',
 };
 
 export class AudioEngine {
@@ -160,6 +164,10 @@ export class AudioEngine {
       case 'win': this._caption('well filled — round complete'); break;
       case 'lose': this._caption('round failed'); break;
       case 'achievement': this._caption('achievement unlocked'); break;
+      case 'hint': this._caption('hint'); break;
+      case 'springDry': this._caption('the spring has run dry'); break;
+      case 'pause': this._caption('paused'); break;
+      case 'resume': this._caption('resumed'); break;
     }
     const sample = SFX_SAMPLES[name];
     if (sample && this._playSample(sample)) return;
@@ -209,6 +217,20 @@ export class AudioEngine {
       case 'achievement':
         [784, 988, 1175].forEach((f, i) =>
           this._blip(f, 0.25, { type: 'sine', gain: 0.1, delay: i * 0.07 }));
+        break;
+      case 'hint':
+        this._blip(700 * vary, 0.07, { type: 'triangle', gain: 0.07 });
+        this._blip(1050 * vary, 0.1, { type: 'triangle', gain: 0.06, delay: 0.06 });
+        break;
+      case 'springDry':
+        this._blip(330, 0.35, { type: 'sine', gain: 0.09, slide: -180 });
+        this._noise(0.25, { freq: 600, q: 0.5, gain: 0.08, delay: 0.05 });
+        break;
+      case 'pause':
+        this._blip(392, 0.18, { type: 'sine', gain: 0.07, slide: -60 });
+        break;
+      case 'resume':
+        this._blip(330, 0.14, { type: 'sine', gain: 0.07, slide: 90 });
         break;
       case 'tick':
         break; // ambient only; no per-tick sound

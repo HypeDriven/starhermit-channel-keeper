@@ -70,6 +70,7 @@ const game = {
   watching: false,
   watchTimer: null,
   gamepadPrev: {},
+  springDry: false,    // one-shot cue when the spring's last unit is emitted
 };
 
 // ---------------------------------------------------------------- renderer
@@ -112,6 +113,7 @@ function startLevel(level, mode, { resume = false } = {}) {
   if (resume) session = Session.restore(level, sessionOpts());
   if (!session) session = new Session(level, sessionOpts());
   game.session = session;
+  game.springDry = session.state.sourceLeft <= 0;
 
   if (renderer) {
     renderer.loadLevel(level, level.theme);
@@ -181,6 +183,14 @@ function handleEvents(events, state) {
         break;
       case 'undo':
         audio.event('undo');
+        break;
+      case 'tick':
+        if (state.sourceLeft <= 0 && !game.springDry) {
+          game.springDry = true;
+          audio.event('springDry');
+          toast('The spring has run dry.');
+          announce('The spring has run dry. The water still in the channels must reach the well on its own.');
+        }
         break;
       case 'end':
         break; // handled by onTerminal
@@ -283,6 +293,11 @@ function showResults(r) {
   $('#sc-contam').textContent = fmtInt(r.score.contamination);
   $('#sc-total').textContent = fmtInt(r.score.total);
   $('#results-seed').textContent = `seed ${r.seed} · ruleset v${CONTENT_VERSION} · session ${r.sessionId}`;
+  const art = $('#results-art');
+  if (art) { // illustration is decorative; a failed load simply hides it
+    art.hidden = false;
+    art.src = r.won ? 'assets/well-filled.webp' : 'assets/water-spent.webp';
+  }
 
   const progBits = [];
   if (game.mode === 'journey') {
@@ -464,7 +479,7 @@ function doHint() {
   if (renderer) renderer.setGhost(x, y, true);
   toast(`Try digging row ${y + 1}, column ${x + 1}.`);
   announce(`Hint: dig row ${y + 1}, column ${x + 1}.`);
-  audio.event('ui');
+  audio.event('hint');
 }
 
 // pointer / touch ------------------------------------------------------------
@@ -614,11 +629,13 @@ function pollGamepad() {
 function pauseGame() {
   if (!game.session || game.watching) return;
   openOverlay('overlay-pause');
+  audio.event('pause');
   announce('Paused.');
 }
 
 function resumeGame() {
   closeOverlay('overlay-pause');
+  audio.event('resume');
   announce('Resumed.');
 }
 
@@ -752,6 +769,7 @@ function watchReplay() {
   fresh.onTerminal = () => {};
   fresh._persist = () => {};
   game.watching = true;
+  game.springDry = false;
   const watchSession = game.session;
   game.session = fresh;
   if (renderer) { renderer.loadLevel(game.level, game.level.theme); fullSync(); }

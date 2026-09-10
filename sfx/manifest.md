@@ -17,3 +17,7 @@ Generated with MOSS-SoundEffect v2.0, 48 kHz mono Opus (96 kbps VBR, loudness-no
 | round-win.opus | win | A cheerful rising bell arpeggio celebrating a well filled with clean water. |
 | round-lose.opus | lose | A soft descending mallet phrase, disappointed but gentle. |
 | achievement-chime.opus | achievement | A bright three-note wind chime sparkle announcing an unlocked achievement. |
+| hint-glimmer.opus | hint | A soft glassy two-note glimmer, like a small bell tapped twice rising in pitch, gentle and quick. |
+| spring-dry.opus | springDry | The last trickle of water from an old iron pipe sputtering and stopping, a final drip echoing in a cave. |
+| pause-hush.opus | pause | A soft muffled cloth thump with a short low hum fading, like a lid closing gently on a wooden box. |
+| resume-swell.opus | resume | A gentle short upward swell, like a wooden lid lifting with a small breath of air and a light tap. |
