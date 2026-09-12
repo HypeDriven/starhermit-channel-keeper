@@ -155,6 +155,7 @@ kbd {
   background: var(--panel); border: 1px solid #263144; border-radius: var(--radius);
   padding: 1rem; display: flex; flex-direction: column; gap: 0.7rem;
 }
+.setup-panel[hidden] { display: none; }
 .setup-panel fieldset { border: none; padding: 0; display: flex; gap: 1rem; flex-wrap: wrap; }
 .setup-panel legend { color: var(--dim); }
 
@@ -195,6 +196,15 @@ kbd {
 .tutorial-panel {
   background: var(--panel-2); border: 1px solid #2c4a66; border-radius: var(--radius);
   padding: 0.8rem;
+}
+.tutorial-panel.floating {
+  position: absolute; z-index: 15; top: 0.5rem; left: 0.5rem; right: 0.5rem;
+  max-width: 34rem; margin: 0 auto; box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+  font-size: 0.92rem; padding: 0.5rem 0.7rem;
+}
+.tutorial-panel.floating[hidden] { display: none; }
+@media (max-width: 1023px) and (orientation: landscape) {
+  .tutorial-panel.floating { right: auto; max-width: min(46vw, 22rem); }
 }
 .tutorial-panel h3 { margin: 0 0 0.3rem; color: var(--accent); }
 .tutorial-panel p { margin: 0.3rem 0; }
@@ -298,13 +308,20 @@ body.left-handed .tray { direction: rtl; }
 @media (max-width: 1023px) {
   #game-layout { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
   .rail {
-    position: absolute; z-index: 20; top: 0; bottom: 0; width: min(20rem, 85vw);
+    /* stops above the tray so Info/Pause stay reachable while a drawer is open */
+    position: absolute; z-index: 20; top: 0; bottom: calc(3.9rem + var(--safe-b)); width: min(20rem, 85vw);
     transition: transform 0.2s ease;
   }
-  #rail-left { left: 0; transform: translateX(-100%); }
-  #rail-right { right: 0; transform: translateX(100%); }
-  .rail.open { transform: translateX(0); }
+  /* drawers are hidden with visibility (not transforms) so nothing extends
+     past the viewport edge and horizontal scrolling can never displace the board */
+  #rail-left { left: 0; transform: translateX(-100%); visibility: hidden; }
+  #rail-right { right: 0; transform: translateX(100%); visibility: hidden; }
+  #rail-left.open, #rail-right.open { transform: none; visibility: visible; box-shadow: 0 0 40px rgba(0,0,0,0.6); }
+  #game-layout { overflow: hidden; position: relative; }
   .tray { display: flex; }
+  .tray .btn { min-width: 0; padding: 0.55rem 0.4rem; font-size: 0.92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* the lesson/objective drawer opens by default on compact screens so
+     first-time guidance is visible; Info closes and reopens it */
 }
 
 /* Portrait mobile: playfield square-ish, tray is the thumb zone */
@@ -316,6 +333,7 @@ body.left-handed .tray { direction: rtl; }
 @media (max-width: 1023px) and (orientation: landscape) {
   .tray { padding-top: 0.3rem; padding-bottom: calc(0.3rem + var(--safe-b)); }
   .tray .btn { min-height: 44px; }
+  .rail { bottom: calc(3.4rem + var(--safe-b)); }
 }
 
 /* Rail toggle buttons only exist on compact layouts */

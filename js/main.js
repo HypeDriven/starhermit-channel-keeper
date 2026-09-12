@@ -1020,11 +1020,33 @@ function applyCompactRails() {
     b.addEventListener('click', () => {
       $('#rail-left').classList.toggle('open');
       $('#rail-right').classList.remove('open');
+      syncInfoState();
     });
+    b.setAttribute('aria-expanded', 'false');
+    b.setAttribute('aria-controls', 'rail-left');
     $('#tray').prepend(b);
   }
   $('#rail-left').classList.remove('open');
   $('#rail-right').classList.remove('open');
+  syncInfoState();
+  placeTutorialPanel();
+}
+
+// On compact layouts the lesson card floats over the playfield so guidance
+// is visible without opening the Info drawer; wide layouts keep it in the rail.
+function placeTutorialPanel() {
+  const panel = $('#tutorial-panel');
+  if (!panel) return;
+  const compact = window.matchMedia('(max-width: 1023px)').matches;
+  const target = compact ? $('.playfield-wrap') : $('#rail-left');
+  if (panel.parentElement !== target) target.appendChild(panel);
+  panel.classList.toggle('floating', compact);
+}
+window.addEventListener('resize', () => { if (!$('#screen-game').hidden) placeTutorialPanel(); });
+
+function syncInfoState() {
+  const b = $('#tray-info');
+  if (b) b.setAttribute('aria-expanded', $('#rail-left').classList.contains('open') ? 'true' : 'false');
 }
 
 // ---------------------------------------------------------------- wiring
