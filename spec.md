@@ -239,9 +239,10 @@ The game ships in **English only**: every string is hard-coded in `index.html` a
 
 Manifest `starhermit.txt` declares `name`, `launch=index.html`, `owner`, `server=server.js`, `cover=coverart.png` per https://wiki.starhermit.com/ conventions. The **server script** (`server.js`) serves the distribution and exposes `GET /api/v1/time`, `GET /api/v1/version`, `GET /api/v1/daily` (key, seed, content version), `POST /api/v1/daily/submit` (replay-validated: schema, content version, ≤20 000 commands, seed must match the day's level, today's UTC board only, `stateHash` must match a fresh `replay`, one row per player, top 200, 30 requests/min), `GET /api/v1/daily/board`, `POST /api/v1/achievement` (idempotent, known keys only), `POST /api/v1/events` and `POST /api/v1/presence` (accepted sinks).
 
-The **client uses today**: `/api/v1/time` at boot (round-trip-adjusted offset that dates the Daily key), `/api/v1/events` beacons (`start`, `tutorial_step`, `round_end`, `retry`, `settings_change`, `error`) and a `/api/v1/presence` heartbeat every 30 s while a round is flowing or finished. All calls are fire-and-forget; offline play is unaffected.
+The **client uses today**: `js/platform.js` reads the launch token from the URL fragment `#game_token=<jwt>` (optional `&session_id=`, stripped after the read; query `?token=` kept for local dev), decodes `sub` + `game_scope` (never hard-coded), sends it as `Authorization: Bearer` on every hosted call, and re-mints it every 45 min via `POST /api/v1/games/{slug}/launch-token` (60 s retry). `GET /api/v1/time` at boot (round-trip-adjusted offset that dates the Daily key). The title line shows the account nickname from `GET /api/v1/users/{sub}/profile` (never usernames, never `/api/v1/me`; `Player <id8>` fallback) with cloud-sync status; offline it keeps the guest line. The save records (`settings`, `progress`, `achievements`, `boards`) mirror to one zip+base64 slot at `GET/PUT /api/v1/me/cloud-saves/{slug}` — remote wins on boot, saves debounce 2 s and flush on `pagehide`/hidden with keepalive; localStorage stays the offline cache. Daily wins post their replay envelope to the own-server `POST /api/v1/daily/submit` (validated; rank toasted) and the Scores screen shows the server-validated `GET /api/v1/daily/board` beside the local board, both only when the own backend answers; a read-only platform leaderboard (`GET /api/v1/games/{slug}` → `leaderboardId` → entries, nicknames resolved) is available when hosted. `POST /api/v1/events` beacons are local-dev only (own backend; the sink does not exist on-platform). All calls are fire-and-forget; offline play is unaffected.
 
-**Not used by the client:** platform identity (the title always reads "Playing as guest"), remote leaderboards (`/api/v1/daily/submit` and `/board` have no client caller; boards are local), remote achievements, hosted sessions/multiplayer, cloud saves.
+**Not used by the client:** hosted sessions/multiplayer, remote achievement grants (achievements stay local in the save doc), presence heartbeats (no per-game presence endpoint exists for launch tokens — removed).
+
 
 ## 13. Technical architecture
 
@@ -283,7 +284,7 @@ QA bar (agents/qa.md) as checkable statements: lesson 1 explains the first mecha
 - `compareResults` and board sorting tie-break with `localeCompare`; session ids are ASCII so order is stable in practice.
 - On compact layouts the right rail (`Reset camera`, `Fast-forward`) has no drawer toggle; only the left `Info` drawer is reachable, so those two actions are desktop-only.
 - The results table prints `-0` for zero contamination (`fmtInt(-0)`).
-- Local boards name every entry "You"; there is no remote board or identity, so "Board rank" only compares your own runs.
+- Local boards name every entry "You"; without the own backend or a platform `leaderboardId`, "Board rank" only compares your own runs.
 - `splash` is bound to a clip but no rules event emits it; the `voice` bus carries nothing.
 - Key bindings are stored in settings but there is no UI to rebind them.
 - `tests/smoke.mjs` and `tests/capture.mjs` hard-code ports 8917/8918 and spawn `server.js`; `tests/e2e.mjs` ignores `BASE_URL`/`PORT` and binds an ephemeral port.
@@ -293,6 +294,6 @@ QA bar (agents/qa.md) as checkable statements: lesson 1 explains the first mecha
 ## Design intent not yet implemented
 
 - Localization into en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR, it-IT with a string table and language selection.
-- Client submission of Daily replays to `/api/v1/daily/submit` and display of the shared `/api/v1/daily/board`, plus platform identity replacing "Playing as guest".
+- Remote achievement grants via `POST /api/v1/achievement` (unlock proofs stay local), and an in-UI daily board tab that merges local and server-validated rows without opening the Scores screen.
 - Remote achievement delivery through `/api/v1/achievement`.
 - A right-rail drawer toggle on compact layouts.

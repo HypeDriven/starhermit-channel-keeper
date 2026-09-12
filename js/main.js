@@ -10,10 +10,11 @@ import {
 import { Session } from './session.js';
 import {
   loadSettings, saveSettings, loadProgress, saveProgress,
-  loadAchievements, unlockAchievement, loadSessionSnapshot,
-  submitScore, loadBoards,
+  loadAchievements, saveAchievements, unlockAchievement, loadSessionSnapshot,
+  submitScore, loadBoards, saveBoards, onRecordsChange,
 } from './storage.js';
 import { AudioEngine } from './audio.js';
+import { platform } from './platform.js';
 import { $, $$, showScreen, openOverlay, closeOverlay, anyOverlayOpen, topOverlay,
   announce, toast, caption, fmtInt } from './ui.js';
 
@@ -26,13 +27,13 @@ audio.onCaption = caption;
 
 let renderer = null;
 let fallbackMode = false;
-let serverOffset = 0; // ms; round-trip-adjusted server time offset
 
-const now = () => new Date(Date.now() + serverOffset);
+const now = () => platform.now();
 
 function track(event, data = {}) {
-  // Anonymous funnel events only: start, tutorial_step, round_end, retry,
-  // settings_change, error. Fire-and-forget; never blocks play.
+  // Anonymous funnel events, local dev only: the events sink is the game's
+  // own dev server and does not exist on-platform (hosted mode never sends).
+  if (!platform.ownServer) return;
   try {
     const body = JSON.stringify({ event, ...data, t: Date.now() });
     if (navigator.sendBeacon) navigator.sendBeacon('/api/v1/events', body);
@@ -41,22 +42,25 @@ function track(event, data = {}) {
 
 async function syncServerTime() {
   try {
-    const t0 = Date.now();
-    const r = await fetch('/api/v1/time', { cache: 'no-store' });
-    if (!r.ok) return;
-    const j = await r.json();
-    const t1 = Date.now();
-    const serverMs = typeof j.now === 'number' ? j.now : Date.parse(j.now || j.time);
-    if (Number.isFinite(serverMs)) serverOffset = serverMs + (t1 - t0) / 2 - t1;
+    await platform.syncTime();
   } catch { /* offline: local clock */ }
 }
 
-function heartbeat() {
-  try {
-    if (navigator.sendBeacon) navigator.sendBeacon('/api/v1/presence', '{}');
-  } catch { /* ignore */ }
+// Account + cloud-sync status line (index.html #profile-line). Offline keeps
+// the identical local-only behaviour; hosted shows the account nickname.
+function renderProfileLine() {
+  const line = $('#profile-line');
+  if (!line) return;
+  if (!platform.hosted) {
+    line.textContent = 'Playing as guest — progress is stored locally.';
+    return;
+  }
+  const name = platform.profile ? platform.profile.name : '…';
+  const syncTxt = platform.sync === 'synced' ? 'progress synced'
+    : platform.sync === 'saving' ? 'saving…'
+    : 'cloud sync unavailable';
+  line.textContent = `Playing as ${name} · ${syncTxt}`;
 }
-setInterval(() => { if (game.session && game.session.phase !== PHASE.EDITING) heartbeat(); }, 30000);
 
 // ---------------------------------------------------------------- game state
 
@@ -245,6 +249,13 @@ function applyResults(r) {
       progress.daily[key] = { score: r.score.total, won: true, clean: r.deliveredClean };
       if (!progress.dailyDays.includes(key)) progress.dailyDays.push(key);
       if (progress.dailyDays.length >= 3) unlock('streak_3');
+      // Validated daily submission to the own-server backend (graceful when
+      // absent); the replay envelope is verified server-side.
+      if (game.session && typeof game.session.exportReplay === 'function') {
+        platform.submitDaily(key, game.session.exportReplay()).then((res) => {
+          if (res.ok) toast(`Daily validated — rank #${res.rank ?? '?'} of ${res.total ?? '?'}.`);
+        }).catch(() => {});
+      }
     }
     if (game.mode === 'challenge') {
       progress.challengesCompleted[r.levelId] = { score: r.score.total };
@@ -858,7 +869,7 @@ function buildScoresScreen() {
   const root = $('#scores-list');
   root.innerHTML = '';
   const ids = Object.keys(boards).sort();
-  if (!ids.length) {
+  if (!ids.length && !platform.ownServer) {
     root.innerHTML = '<p class="dim">No scores yet. Win a daily, journey, or challenge round to post one.</p>';
     return;
   }
@@ -879,6 +890,30 @@ function buildScoresScreen() {
     });
     table.appendChild(tb);
     root.appendChild(table);
+    // Server-validated daily board (own backend; silent when absent).
+    if (id.startsWith('daily-') && platform.ownServer) {
+      platform.fetchDailyBoard(id).then(async (entries) => {
+        if (!entries || !entries.length) return;
+        const h2 = document.createElement('h3');
+        h2.textContent = id + ' — validated';
+        root.appendChild(h2);
+        const t2 = document.createElement('table');
+        t2.className = 'board-list';
+        t2.innerHTML = '<thead><tr><th>#</th><th>Player</th><th>Score</th></tr></thead>';
+        const tb2 = document.createElement('tbody');
+        for (let i = 0; i < entries.slice(0, 10).length; i++) {
+          const e = entries[i];
+          const pid = String(e.playerId || '');
+          const name = (pid && platform.hosted) ? await platform.profileFor(pid) : (pid || 'anon');
+          const tr = document.createElement('tr');
+          if (pid && pid === platform.userId) tr.className = 'you';
+          tr.innerHTML = `<td>${i + 1}</td><td>${name}</td><td class="num">${fmtInt(e.score)}</td>`;
+          tb2.appendChild(tr);
+        }
+        t2.appendChild(tb2);
+        root.appendChild(t2);
+      }).catch(() => {});
+    }
   }
 }
 
@@ -1147,8 +1182,33 @@ async function boot() {
   bindKeyboard();
   bindLifecycle();
 
+  // Mirror the save records to the cloud slot after every persist point.
+  onRecordsChange(() => {
+    if (!platform.hosted) return;
+    platform.saveCloud({ settings, progress, achievements: loadAchievements(), boards: loadBoards() });
+  });
+
   step(35, 'Synchronising clock…');
-  await Promise.race([syncServerTime(), new Promise((r) => setTimeout(r, 1500))]);
+  platform.onSync(renderProfileLine);
+  try { platform.init(); } catch { /* offline */ }
+  try {
+    await Promise.race([syncServerTime(), new Promise((r) => setTimeout(r, 1500))]);
+  } catch { /* local clock */ }
+  if (platform.hosted) {
+    // Remote save wins over the local cache (records are applied in place —
+    // settings/progress are shared references throughout the app).
+    try {
+      await Promise.race([platform.fetchProfile(), new Promise((r) => setTimeout(r, 2000))]);
+    } catch { /* nickname lands whenever it resolves */ }
+    const remote = await platform.loadCloud();
+    if (remote) {
+      if (remote.settings) { Object.assign(settings, remote.settings); saveSettings(settings); }
+      if (remote.progress) { Object.assign(progress, remote.progress); saveProgress(progress); }
+      if (remote.achievements) saveAchievements(Object.assign(loadAchievements(), remote.achievements));
+      if (remote.boards) saveBoards(remote.boards);
+    }
+    renderProfileLine();
+  }
 
   step(60, 'Building scene…');
   await initRenderer();

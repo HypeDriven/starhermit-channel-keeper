@@ -41,9 +41,18 @@ function read(key, fallback) {
   }
 }
 
+let _recordsListener = null;
+// The platform adapter registers here to mirror the save records to the
+// cloud slot (debounced there); called after every settings/progress/
+// achievements/boards write.
+export function onRecordsChange(fn) { _recordsListener = fn; }
+
 function write(key, data) {
   try {
     localStorage.setItem(PREFIX + key, JSON.stringify(wrap(data)));
+    if (_recordsListener && (key === 'settings' || key === 'progress' || key === 'achievements' || key === 'boards')) {
+      try { _recordsListener(); } catch { /* mirror errors never break saves */ }
+    }
     return true;
   } catch {
     return false;
@@ -124,6 +133,10 @@ export function loadAchievements() {
   return read('achievements', {}); // key -> unix ms
 }
 
+export function saveAchievements(all) {
+  return write('achievements', all || {});
+}
+
 export function unlockAchievement(key) {
   const all = loadAchievements();
   if (all[key]) return false; // idempotent
@@ -155,6 +168,10 @@ export function clearSessionSnapshot() {
 
 export function loadBoards() {
   return read('boards', {});
+}
+
+export function saveBoards(boards) {
+  return write('boards', boards);
 }
 
 export function submitScore(boardId, entry, maxEntries = 50) {
