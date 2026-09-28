@@ -14,6 +14,8 @@ import {
   submitScore, loadBoards, saveBoards, onRecordsChange,
 } from './storage.js';
 import { AudioEngine } from './audio.js';
+import { CATEGORIES, PRESETS, resolve, presetTier, choosePreset, describe } from './gfx.js';
+import { gfxStrings, pickLocale } from './gfx-i18n.js';
 import { platform } from './platform.js';
 import { $, $$, showScreen, openOverlay, closeOverlay, anyOverlayOpen, topOverlay,
   announce, toast, caption, fmtInt } from './ui.js';
@@ -88,9 +90,9 @@ async function initRenderer() {
       if (lost) toast('Graphics context lost — recovering…');
       else { toast('Graphics recovered.'); if (game.session) fullSync(); }
     };
-    const q = settings.quality === 'auto' ? detectQuality() : settings.quality;
-    renderer.setQuality(q);
+    renderer.setGraphics(gfxSaved());
     renderer.setReducedMotion(settings.reducedMotion);
+    document.body.dataset.gfxPreset = renderer.q.preset;
   } catch (err) {
     console.warn('WebGL unavailable, using DOM fallback', err);
     fallbackMode = true;
@@ -99,10 +101,105 @@ async function initRenderer() {
   }
 }
 
-function detectQuality() {
-  const coarse = window.matchMedia('(pointer: coarse)').matches;
-  const small = Math.min(screen.width, screen.height) < 800;
-  return coarse || small ? 'low' : 'high';
+// ---------------------------------------------------------------- graphics settings
+
+const gt = gfxStrings(pickLocale(navigator.language));
+
+/** Saved graphics settings in the gfx.js shape (preset + overrides). */
+function gfxSaved() {
+  return { ...settings.gfx, preset: settings.quality };
+}
+
+function applyGraphics() {
+  saveSettings(settings);
+  const saved = gfxSaved();
+  if (renderer) { renderer.setGraphics(saved); fullSync(); }
+  document.body.dataset.gfxPreset = renderer ? renderer.q.preset : resolve(saved, 'low').preset;
+  refreshGfxPanel();
+  // Pixel size and post chain settle on the next frame.
+  setTimeout(refreshGfxPanel, 150);
+  track('settings_change', { key: 'graphics' });
+}
+
+function buildGfxPanel() {
+  $('#gfx-legend').textContent = gt('legend');
+  for (const el of $$('[data-gfx-text]')) el.textContent = gt(el.dataset.gfxText);
+  const host = $('#gfx-cats');
+  host.textContent = '';
+  for (const [cat, tiers] of Object.entries(CATEGORIES)) {
+    const label = document.createElement('label');
+    const span = document.createElement('span');
+    span.textContent = gt(`cat_${cat}`);
+    const sel = document.createElement('select');
+    sel.id = `set-gfx-${cat}`;
+    sel.dataset.gfxCat = cat;
+    for (const v of ['preset', ...tiers]) {
+      const o = document.createElement('option');
+      o.value = v;
+      o.textContent = v === 'preset' ? '' : gt(`t_${v}`);
+      sel.appendChild(o);
+    }
+    sel.addEventListener('change', () => {
+      if (sel.value === 'preset') delete settings.gfx[cat];
+      else settings.gfx[cat] = sel.value;
+      applyGraphics();
+    });
+    label.append(span, ' ', sel);
+    host.appendChild(label);
+  }
+  $('#set-quality').addEventListener('change', () => {
+    const next = choosePreset(gfxSaved(), $('#set-quality').value);
+    settings.quality = next.preset;
+    delete next.preset;
+    settings.gfx = next;
+    applyGraphics();
+  });
+  const scale = $('#set-gfx-scale');
+  scale.addEventListener('input', () => {
+    settings.gfx.render_scale = Math.round(parseFloat(scale.value)) / 100;
+    $('#gfx-scale-val').textContent = `${scale.value}%`;
+    applyGraphics();
+  });
+  $('#set-gfx-adaptive').addEventListener('change', () => {
+    settings.gfx.adaptive = $('#set-gfx-adaptive').checked;
+    applyGraphics();
+  });
+  $('#set-gfx-fps').addEventListener('change', () => {
+    settings.gfx.show_fps = $('#set-gfx-fps').checked;
+    applyGraphics();
+  });
+  refreshGfxPanel();
+}
+
+/** Sync the Graphics controls, labels and summary with the resolved settings. */
+function refreshGfxPanel() {
+  const info = renderer ? renderer.graphicsInfo() : null;
+  const detected = info ? info.detected : 'low';
+  const r = info ? info.resolved : resolve(gfxSaved(), detected);
+  const q = $('#set-quality');
+  for (const o of q.options) o.textContent = o.value === 'auto' ? gt('auto', { tier: gt(detected) }) : gt(o.value);
+  q.value = PRESETS.includes(settings.quality) ? settings.quality : 'auto';
+  for (const cat of Object.keys(CATEGORIES)) {
+    const sel = $(`#set-gfx-${cat}`);
+    if (!sel) continue;
+    sel.options[0].textContent = gt('fromPreset', { tier: gt(`t_${presetTier(r.preset, cat)}`) });
+    sel.value = settings.gfx[cat] && CATEGORIES[cat].includes(settings.gfx[cat]) ? settings.gfx[cat] : 'preset';
+  }
+  const pct = Math.round((r.renderScale || 1) * 100);
+  $('#set-gfx-scale').value = pct;
+  $('#gfx-scale-val').textContent = `${pct}%`;
+  $('#set-gfx-adaptive').checked = r.adaptive;
+  $('#set-gfx-fps').checked = r.showFps;
+  const words = {
+    noShadows: gt('w_noShadows'), shadows: gt('w_shadows'), ao: gt('w_ao'),
+    aoHigh: gt('w_aoHigh'), bloom: gt('w_bloom'), noAA: gt('w_noAA'),
+  };
+  $('#gfx-summary').textContent = info
+    ? `${info.gpu} · ${describe(r, info.pixels, words)}`
+    : gt('noWebgl');
+  const note = $('#gfx-post-note');
+  note.hidden = !(info && info.postFailed);
+  note.textContent = gt('postFailed');
 }
 
 // ---------------------------------------------------------------- level flow
@@ -976,13 +1073,7 @@ function bindSettings() {
       track('settings_change', { key });
     });
   }
-  $('#set-quality').value = settings.quality;
-  $('#set-quality').addEventListener('change', () => {
-    settings.quality = $('#set-quality').value;
-    saveSettings(settings);
-    if (renderer) renderer.setQuality(settings.quality === 'auto' ? detectQuality() : settings.quality);
-    track('settings_change', { key: 'quality' });
-  });
+  buildGfxPanel();
   $('#set-palette').value = settings.palette;
   $('#set-palette').addEventListener('change', () => {
     settings.palette = $('#set-palette').value;
@@ -1072,7 +1163,7 @@ function bindUI() {
   $('#btn-scores').addEventListener('click', () => { buildScoresScreen(); openOverlay('overlay-scores'); });
   $('#btn-achievements').addEventListener('click', () => { buildAchievements(); openOverlay('overlay-achv'); });
   $('#btn-help').addEventListener('click', () => openOverlay('overlay-help'));
-  $('#btn-settings').addEventListener('click', () => openOverlay('overlay-settings'));
+  $('#btn-settings').addEventListener('click', () => { refreshGfxPanel(); openOverlay('overlay-settings'); });
 
   // mode select
   $$('#mode-grid .card').forEach((card) => {
@@ -1109,7 +1200,7 @@ function bindUI() {
 
   // pause overlay
   $('#btn-resume-game').addEventListener('click', resumeGame);
-  $('#btn-pause-settings').addEventListener('click', () => openOverlay('overlay-settings'));
+  $('#btn-pause-settings').addEventListener('click', () => { refreshGfxPanel(); openOverlay('overlay-settings'); });
   $('#btn-pause-help').addEventListener('click', () => openOverlay('overlay-help'));
   $('#btn-pause-restart').addEventListener('click', () => {
     closeOverlay('overlay-pause');
@@ -1234,6 +1325,7 @@ async function boot() {
 
   step(60, 'Building scene…');
   await initRenderer();
+  refreshGfxPanel();
 
   step(85, 'Preparing content…');
   refreshTitleStats();

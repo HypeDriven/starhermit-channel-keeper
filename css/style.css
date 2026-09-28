@@ -257,6 +257,20 @@ body.left-handed .tray { direction: rtl; }
 .settings-cols legend { color: var(--accent); padding: 0 0.3rem; }
 .settings-cols label { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; min-height: 32px; }
 .settings-cols input[type="range"] { flex: 1; max-width: 9rem; }
+.settings-cols .gfx-fieldset { grid-column: 1 / -1; }
+.gfx-grid { display: grid; gap: 0.3rem 1.2rem; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
+.gfx-range { display: flex; align-items: center; gap: 0.5rem; flex: 1; justify-content: flex-end; }
+.gfx-range output { min-width: 3.2rem; text-align: right; font-variant-numeric: tabular-nums; }
+.gfx-summary { margin: 0.2rem 0 0; overflow-wrap: anywhere; }
+.gfx-note { margin: 0; color: var(--focus); }
+.gfx-grid select { max-width: 62%; min-width: 0; text-overflow: ellipsis; }
+#fps-meter {
+  position: fixed; z-index: 60; pointer-events: none;
+  top: calc(0.4rem + var(--safe-t)); left: 50%; transform: translateX(-50%);
+  background: rgba(4, 7, 12, 0.72); color: var(--text); border-radius: 6px;
+  padding: 0.15rem 0.5rem; font: 12px/1.4 ui-monospace, monospace;
+}
+#fps-meter[hidden] { display: none; }
 .settings-cols select { background: var(--panel-2); color: var(--text); border: 1px solid #2c3648; border-radius: 6px; padding: 0.3rem; }
 
 .help-cards { display: grid; gap: 0.7rem; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); }

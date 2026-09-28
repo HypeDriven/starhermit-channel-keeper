@@ -8,7 +8,7 @@
 <title>Channel Keeper</title>
 <link rel="stylesheet" href="css/style.css">
 <script type="importmap">
-{ "imports": { "three": "./vendor/three.module.js" } }
+{ "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/addons/" } }
 </script>
 </head>
 <body>
@@ -215,16 +215,29 @@
           <label>Voice cues <input type="range" id="set-voice" min="0" max="1" step="0.05"></label>
           <label><input type="checkbox" id="set-muted"> Mute all</label>
         </fieldset>
-        <fieldset>
-          <legend>Graphics</legend>
-          <label>Quality
-            <select id="set-quality">
-              <option value="auto">Auto</option><option value="low">Low</option>
-              <option value="medium">Medium</option><option value="high">High</option>
-            </select></label>
-          <label><input type="checkbox" id="set-motion"> Reduced motion</label>
-          <label>Camera
-            <select id="set-camera"><option value="fit">Fit board</option><option value="close">Close</option></select></label>
+        <fieldset class="gfx-fieldset" id="gfx-fieldset">
+          <legend id="gfx-legend">Graphics</legend>
+          <div class="gfx-grid">
+            <label><span data-gfx-text="quality">Quality</span>
+              <select id="set-quality" data-gfx="preset">
+                <option value="auto">Auto</option><option value="low">Low</option>
+                <option value="balanced">Balanced</option><option value="high">High</option>
+                <option value="ultra">Ultra</option>
+              </select></label>
+            <label><span data-gfx-text="renderScale">Render scale</span>
+              <span class="gfx-range"><input type="range" id="set-gfx-scale" data-gfx="render_scale" min="50" max="200" step="10" value="100">
+              <output id="gfx-scale-val" for="set-gfx-scale">100%</output></span></label>
+          </div>
+          <div class="gfx-grid" id="gfx-cats"></div>
+          <div class="gfx-grid">
+            <label><input type="checkbox" id="set-gfx-adaptive" data-gfx="adaptive"> <span data-gfx-text="adaptive">Adaptive resolution</span></label>
+            <label><input type="checkbox" id="set-gfx-fps" data-gfx="show_fps"> <span data-gfx-text="showFps">Show frame rate</span></label>
+            <label><input type="checkbox" id="set-motion"> Reduced motion</label>
+            <label>Camera
+              <select id="set-camera"><option value="fit">Fit board</option><option value="close">Close</option></select></label>
+          </div>
+          <p id="gfx-summary" class="dim small gfx-summary"></p>
+          <p id="gfx-post-note" class="small gfx-note" hidden></p>
         </fieldset>
         <fieldset>
           <legend>Accessibility</legend>

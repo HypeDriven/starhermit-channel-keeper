@@ -13,20 +13,23 @@
 | Players | 1; asynchronous local score boards |
 | Session | Lessons ~1–2 min; Journey/Daily/Challenge rounds 2–5 min; a title-to-results loop under 90 s on tutorial 1 |
 | Platforms | Desktop browsers (keyboard, mouse, gamepad) and mobile browsers (touch), portrait and landscape |
-| Rendering | Three.js r-module in `vendor/three.module.js`, instanced meshes, ACES tone mapping; a DOM button-grid fallback when WebGL is unavailable |
+| Rendering | Three.js r166 (0.166.1) in `vendor/three.module.js` plus same-revision addons in `vendor/addons/`; instanced meshes, ACES tone mapping, IBL, optional post chain (GTAO, bloom, grade, FXAA/SMAA/MSAA) with quality presets; a DOM button-grid fallback when WebGL is unavailable |
 | Simulation | Fixed 220 ms tick, fully deterministic, replay-hash verified |
 
 **File map**
 
 | Path | Responsibility |
 |---|---|
-| `index.html` | All screens, overlays, live regions, HUD, tray, settings form; loads `js/main.js` as a module |
+| `index.html` | All screens, overlays, live regions, HUD, tray, settings form; importmap (`three`, `three/addons/`); loads `js/main.js` as a module |
+| `vendor/` | `three.module.js` (0.166.1) and `addons/` (postprocessing passes, shaders, `RoomEnvironment`, `RoundedBoxGeometry`, `SimplexNoise` from the same release) |
 | `css/style.css` | Palette tokens, layout grid, drawers/tray breakpoints, overlays, reduced-motion and high-contrast classes |
 | `js/rules.js` | Pure rules engine: `createState`, `applyCommand`, `stepFlow`, `scoreBreakdown`, `stateHash`, `replay`, `legalActions`, `explainCarve`, `compareResults` |
 | `js/content.js` | Level generator, `findRoute`, `validateLevel`/`autoSolve`, 5 tutorials, 40 Journey stages, 6 challenges, daily seed, practice tiers, 5 themes, 6 achievements |
 | `js/session.js` | `Session`: command ids, fixed-step `advance`, undo, `skipToEnd`, resume snapshots, replay envelope |
 | `js/rng.js` | FNV-1a `hashString`, mulberry32 `makeRng(seed, stream)` |
-| `js/render.js` | `BoardRenderer`: scene, instanced cells/water, decor, particles, shake, camera fit, raycast pick, palettes |
+| `js/render.js` | `BoardRenderer`: scene, instanced cells/water, decor, particles, dust motes, shake, camera fit, raycast pick, palettes, `setGraphics`/`graphicsInfo`, post chain, adaptive resolution |
+| `js/gfx.js` | Pure graphics quality model: presets, categories, `detectPreset`, `resolve`, `choosePreset`, `presetTier`, `describe` |
+| `js/gfx-i18n.js` | Graphics-panel strings in 9 locales, `pickLocale`, `gfxStrings` |
 | `js/audio.js` | `AudioEngine`: WebAudio buses, authored Opus clips with synthesized fallbacks, generative pad, ambience, captions |
 | `js/storage.js` | Versioned + checksummed localStorage documents: settings, progress, achievements, session snapshot, boards |
 | `js/ui.js` | Screen switching, overlay stack with focus trap/restore, `announce`, `toast`, `caption`, `fmtInt` |
@@ -37,6 +40,7 @@
 | `coverart.png`, `icon.png`, `favicon.svg` | Platform cover (1200×675), icon, tab icon |
 | `starhermit.txt` | `name`, `launch=index.html`, `owner`, `server=server.js`, `cover=coverart.png` |
 | `tests/run-tests.mjs` | 28 rules/content tests (`npm test`) |
+| `tests/gfx.test.mjs` | 7 `node --test` tests for `gfx.js` and the graphics strings (`npm test`) |
 | `tests/e2e.mjs` | Playwright-core playthrough at desktop and mobile viewports (`npm run test:e2e`) |
 | `tests/smoke.mjs`, `tests/capture.mjs` | Older puppeteer smoke run and screenshot capture (dev only) |
 | `knownissues.md` | QA log of confirmed, resolved and suspected defects |
@@ -184,11 +188,13 @@ boot ─► title ─► mode ─► levels ─► game(editing) ─release─�
 
 Colour-vision palettes override water/dirty/foul/well hues (deuteranopia, protanopia, tritanopia, contrast). Hazards are also spiked (three cones per foul pocket) so they never rely on colour alone.
 
-**Shape language.** The board is a cut face of instanced 0.94-unit boxes with seeded depth jitter, a rock slab behind, a floor and scattered dodecahedron boulders per quality tier. Water is an emissive box scaled to fill (0–4 units); the spring is a tilted metal pipe with a cyan point light; the well is a pulsing torus with a mint point light. Selection is a white edge outline plus a grounded ring; the ghost is a translucent green (legal) or red (illegal) box.
+**Shape language.** The board is a cut face of instanced 0.94-unit boxes (bevelled with a procedural grain/pebble texture and bump at `detailed` surface detail) with seeded depth jitter, a textured cavern wall behind, a floor and scattered lumpy boulders. Packed clay carries horizontal strata and carved channels a damp, glossier floor (per-instance kind attribute), so cell types differ by pattern as well as colour. Water is a clear-coated box scaled to fill (0–4 units) that glows with its own hue; the spring is a tilted, flanged metal pipe with a cyan point light; the well is a pulsing clear-coated torus with a mint point light. Selection is a white edge outline plus a grounded ring; the ghost is a translucent green (legal) or red (illegal) box.
+
+**Graphics.** Lighting is a key directional lamp (PCF soft shadows whose frustum is fitted to the board) plus a hemisphere fill, ACES filmic tone mapping and sRGB output; at `detailed` surface detail a PMREM-filtered `RoomEnvironment` gives PBR materials subtle reflections (`environmentIntensity` 0.28). Optional effects: GTAO contact darkening between cells, bloom limited to the water, well ring and spring glow (threshold 0.86), a colour grade (gentle S-curve, slight saturation, warm highlights/cool shadows) with vignette, FXAA/SMAA/MSAA (MSAA via a multisampled post target, so it changes without a reload), a water shimmer (`water: animated`), drifting dust motes and a faint lamp breathing (`background: animated`), and particle caps 300/2000 (`particles`). Shimmer, motes and lamp breathing stop under reduced motion. Settings → **Graphics** offers Quality (Auto — chosen from the `WEBGL_debug_renderer_info` GPU string: software renderers get Low, discrete GPUs / Apple M get High, otherwise Balanced, and touch devices cap at Balanced — Low, Balanced, High, Ultra), Render scale 50–200 %, one select per category (`shadows`, `ao`, `bloom`, `grade`, `antialias`, `particles`, `background`, `detail`, `water`; default "From preset (…)"), Adaptive resolution (averages 90 frames; above 26 ms steps down 0.1 to 0.6, below 14 ms back up 0.05), Show frame rate (`#fps-meter`), and a summary "GPU · cost · W×H px". Choosing a preset clears the overrides. Pixel ratio is min(dpr, preset cap: Low 1, Balanced 1.5, High/Ultra 2) × preset scale (Ultra 1.25) × render scale × adaptive scale. Changes apply live and are saved in `settings.quality` (preset) and `settings.gfx` (overrides, scale, toggles); the canvas and `<body>` carry `data-gfx-preset`. The post chain (EffectComposer: RenderPass → GTAO → UnrealBloom → OutputPass → grade → SMAA/FXAA) runs only when an effect needs it — Low renders directly with no IBL, shadows or AA, as cheap as the pre-preset low tier; if the chain cannot be built the game renders without it and the panel says so. Controls have stable ids (`#set-quality`, `#set-gfx-scale`, `#set-gfx-<category>` with `data-gfx-cat`, `#set-gfx-adaptive`, `#set-gfx-fps`, `#gfx-summary`, `#gfx-post-note`).
 
 **Typography.** System UI stack; logo `clamp(2rem, 6vw, 3.2rem)` in accent with a soft glow; rail headings uppercase 0.8 rem; tabular numerals in the score table; `Larger text` raises the root size to 20 px.
 
-**Motion.** Camera fit/close transitions ease in-out over 0.6 s; shake impulses 0.08 (clay dig), 0.12 (release), 0.22/0.30 (win/lose) with fast decay; particles have a 2048 hard cap and 300/800/2000 per tier; the well ring and spring glow breathe. Reduced motion (setting or body class) kills CSS transitions, snaps the camera, disables shake and idle breathing, caps bursts at 4 particles; water fill still interpolates between ticks.
+**Motion.** Camera fit/close transitions ease in-out over 0.6 s; shake impulses 0.08 (clay dig), 0.12 (release), 0.22/0.30 (win/lose) with fast decay; particles have a 2048 hard cap and 300/2000 by the `particles` setting; the well ring and spring glow breathe. Reduced motion (setting or body class) kills CSS transitions, snaps the camera, disables shake and idle breathing, caps bursts at 4 particles; water fill still interpolates between ticks.
 
 **Hero.** The glowing channel of water descending the cut face; UI stays flat and dark around it. The key art (`assets/key-art.webp`) and cover reproduce exactly that: rusted spring pipe, cyan fall through soil and clay bands, mint well, ochre crystal pockets.
 
@@ -222,7 +228,7 @@ Colour-vision palettes override water/dirty/foul/well hues (deuteranopia, protan
 
 ## 10. Localization
 
-The game ships in **English only**: every string is hard-coded in `index.html` and `js/main.js` / `js/content.js`, `<html lang="en">`, and `fmtInt` formats with `en-US`. No language selection exists and no translation table is loaded. Layout allowances already in place for expansion: buttons wrap (`.btn-row.wrap`), the title menu is a column, help cards and settings columns reflow with `auto-fit`, and rails scroll. Shipping en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR and it-IT is listed under "Design intent not yet implemented".
+The Graphics settings section (`js/gfx-i18n.js`) is localized into en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR and it-IT, picked from `navigator.language` (es-* → es-419 except es-ES, fr-* → fr-FR except fr-CA, pt-* → pt-BR). Otherwise the game ships in **English only**: every string is hard-coded in `index.html` and `js/main.js` / `js/content.js`, `<html lang="en">`, and `fmtInt` formats with `en-US`. No language selection exists and no translation table is loaded. Layout allowances already in place for expansion: buttons wrap (`.btn-row.wrap`), the title menu is a column, help cards and settings columns reflow with `auto-fit`, and rails scroll. Shipping en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR and it-IT is listed under "Design intent not yet implemented".
 
 ## 11. Accessibility
 
@@ -249,15 +255,15 @@ The **client uses today**: `js/platform.js` reads the launch token from the URL 
 - **Loop** (`main.js loop`): `requestAnimationFrame`; `Session.advance(dt)` fires as many 220 ms ticks as owed (max 50 per frame, dt clamped to 100 ms) unless an overlay is open, the tab is hidden or a replay is being watched; the renderer receives `(state, prevSnapshot, alpha)` and interpolates water fill.
 - **Session** (`session.js`): command ids `s<base36 time>-<n>:<k>`; `_persist` saves a checksummed snapshot after every accepted command (cleared on terminal, suppressed during replay watch); `restore` rebuilds from `channelkeeper.session` when the level id matches; `exportReplay` yields `{schema 1, rulesVersion, contentVersion, levelId, seed, commands, stateHash, terminal}`.
 - **Persistence** (`storage.js`): keys `channelkeeper.settings | progress | achievements | session | boards`, each `{v:1, data, sum}` with an FNV-1a checksum; corrupt or foreign documents fall back to defaults; `Erase local progress` clears localStorage and reloads.
-- **Renderer** (`render.js`): quality tiers low (dpr 1, 300 particles, no AA/shadows), medium (1.5, 800, AA), high (2, 2000, AA, PCF shadows); auto picks low on coarse pointers or screens under 800 px, else high. One instanced mesh for cells, one for water, one for spikes; raycasts hit only an invisible pick plane; context loss rebuilds the level from retained descriptors; shaders are pre-compiled on load.
+- **Renderer** (`render.js`): graphics presets and overrides from `gfx.js` (see §8 Graphics); a detail change rebuilds the level geometry, shadow changes recompile materials, and the post chain is rebuilt when its key (effects, size, pixel ratio) changes. One instanced mesh for cells, one for water, one for spikes; raycasts hit only an invisible pick plane; context loss rebuilds the level from retained descriptors; shaders are pre-compiled on load.
 - **Budgets:** boards ≤ 13×16 = 208 cells; per-tick work is O(cells); render ≤ ~10 draw calls plus particles; assets total ≈ 0.85 MB (three.js excluded); no external network dependency at runtime.
 - **E2E** (`tests/e2e.mjs`): starts its own static server on an ephemeral port with stubbed `/api/v1/time|events|presence`, launches headless Chrome via playwright-core and clicks the real UI at 1280×800 and 390×844 (touch). `window.__ckTest` exposes `phase()`/`state()` read-only for synchronisation; every action is real input.
 
 ## 14. Testing and acceptance criteria
 
-`npm test` (28 tests, `tests/run-tests.mjs`): state creation and serialisation; carve costs and each invalid reason; budget exhaustion; release/tick phase rules; duplicate ids; undo restore and refusal; mid-flow carve refusal; `legalActions`; terminal `settled-dry`, `timeout`, contamination outcome; integer score coherence; comparator order; stable hashes; replay determinism on three levels; replay with undo; 400-command malformed fuzz; every tutorial/journey/challenge validates; daily immutability per UTC day; practice tiers; golden hashes; 150-seed generator fuzz; hint route after carving.
+`npm test` runs `tests/run-tests.mjs` (28 tests) and `node --test tests/gfx.test.mjs` (7 tests: `detectPreset` on sample GPU strings incl. the touch cap, `resolve` with preset/override/invalid tier/scale clamp, preset clears overrides, `describe`, strings present in all 9 locales). `tests/run-tests.mjs`: state creation and serialisation; carve costs and each invalid reason; budget exhaustion; release/tick phase rules; duplicate ids; undo restore and refusal; mid-flow carve refusal; `legalActions`; terminal `settled-dry`, `timeout`, contamination outcome; integer score coherence; comparator order; stable hashes; replay determinism on three levels; replay with undo; 400-command malformed fuzz; every tutorial/journey/challenge validates; daily immutability per UTC day; practice tiers; golden hashes; 150-seed generator fuzz; hint route after carving.
 
-`node tests/e2e.mjs` (desktop + mobile, 13/12 steps): title loads; settings persists quality; Learn list has 5 lessons; lesson 1 shows the tutorial panel; keyboard carves leave budget 4 and 4 moves; release wins and results total > 0; progress and `first_flow` persisted; watch replay returns to results (desktop); retry; pause/resume; pause freezes `tick`; pointer/tap carves via raycast; leave → results → title; zero non-benign console errors.
+`node tests/e2e.mjs` (desktop + mobile, 14/13 steps): title loads; settings persists quality; Graphics: Low then High apply live (`data-gfx-preset`, summary), a bloom override is saved and leaves the summary, both survive a reload, choosing Low clears overrides; Learn list has 5 lessons; lesson 1 shows the tutorial panel; keyboard carves leave budget 4 and 4 moves; release wins and results total > 0; progress and `first_flow` persisted; watch replay returns to results (desktop); retry; pause/resume; pause freezes `tick`; pointer/tap carves via raycast; leave → results → title; zero non-benign console errors or warnings.
 
 QA bar (agents/qa.md) as checkable statements: lesson 1 explains the first mechanic before any input; every button, card and overlay is reachable by mouse, touch and keyboard; no console errors at 1280×800 or 390×844; the tray and results total are visible without horizontal scroll in portrait and landscape; `Hint`, `Undo`, `Fast-forward`, `Reset camera`, `Watch replay`, palettes and every settings control do something observable.
 
@@ -275,7 +281,8 @@ QA bar (agents/qa.md) as checkable statements: lesson 1 explains the first mecha
 | `sfx/spring-dry.opus` | `springDry` | MOSS-SFX v2, 100 steps | generated in this pass |
 | `sfx/pause-hush.opus` | `pause` | MOSS-SFX v2, 100 steps | generated in this pass |
 | `sfx/resume-swell.opus` | `resume` | MOSS-SFX v2, 100 steps | generated in this pass |
-| `vendor/three.module.js` | Renderer library | three.js (MIT) | shipped |
+| `vendor/three.module.js` | Renderer library | three.js 0.166.1 (MIT) | shipped |
+| `vendor/addons/**` | Post-processing passes, shaders, `RoomEnvironment`, `RoundedBoxGeometry` | three.js 0.166.1 `examples/jsm` (MIT) | shipped |
 | 3D models / character animation | – | – | none: all geometry procedural; no humanoid |
 
 ## 16. Known limitations

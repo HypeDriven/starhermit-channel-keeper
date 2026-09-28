@@ -68,7 +68,8 @@ export const DEFAULT_SETTINGS = {
   volMaster: 0.8, volMusic: 0.6, volEffects: 0.9, volAmbience: 0.5, volVoice: 0.8,
   muted: false,
   // graphics
-  quality: 'auto',            // auto | low | medium | high
+  quality: 'auto',            // auto | low | balanced | high | ultra (graphics preset)
+  gfx: {},                    // graphics overrides: render_scale, adaptive, show_fps, <category>: tier
   reducedMotion: false,
   // accessibility
   palette: 'default',         // default | deuteranopia | protanopia | tritanopia | contrast
@@ -94,6 +95,8 @@ export function loadSettings() {
   const s = read('settings', {});
   const merged = Object.assign({}, DEFAULT_SETTINGS, s);
   merged.bindings = Object.assign({}, DEFAULT_SETTINGS.bindings, s.bindings || {});
+  merged.gfx = Object.assign({}, s.gfx && typeof s.gfx === 'object' ? s.gfx : {});
+  if (merged.quality === 'medium') merged.quality = 'balanced'; // pre-preset tier name
   return merged;
 }
 

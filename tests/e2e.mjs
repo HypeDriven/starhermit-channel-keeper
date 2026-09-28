@@ -79,7 +79,9 @@ async function runPass(label, contextOpts) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   page.on('console', (m) => {
-    if (m.type() === 'error' && !browserNoise.test(m.text())) errors.push(`console: ${m.text()}`);
+    if ((m.type() === 'error' || m.type() === 'warning') && !browserNoise.test(m.text())) {
+      errors.push(`console ${m.type()}: ${m.text()}`);
+    }
   });
 
   const step = async (name, fn) => {
@@ -104,6 +106,48 @@ async function runPass(label, contextOpts) {
       );
       if (q !== 'low') throw new Error(`quality not persisted, got ${q}`);
       await page.screenshot({ path: SHOT('settings', label) });
+      await page.click('#btn-settings-close');
+      await page.waitForSelector('#overlay-settings[hidden]', { state: 'attached', timeout: 5000 });
+    });
+
+    await step('graphics: presets and an override apply live and survive reload', async () => {
+      const gfx = () => page.evaluate(() => ({
+        body: document.body.dataset.gfxPreset,
+        canvas: document.querySelector('#game-canvas')?.dataset.gfxPreset,
+        summary: document.querySelector('#gfx-summary').textContent,
+        saved: JSON.parse(localStorage.getItem('channelkeeper.settings')).data,
+      }));
+      await page.click('#btn-settings');
+      await page.waitForSelector('#overlay-settings:not([hidden])');
+      await page.locator('#set-quality').scrollIntoViewIfNeeded();
+      await page.selectOption('#set-quality', 'low');
+      let g = await gfx();
+      if (g.body !== 'low' || g.canvas !== 'low') throw new Error(`low not applied: ${JSON.stringify(g)}`);
+      if (!/no shadows/.test(g.summary)) throw new Error(`low summary: ${g.summary}`);
+      await page.selectOption('#set-quality', 'high');
+      await page.waitForFunction(() => /2048² shadows/.test(document.querySelector('#gfx-summary').textContent));
+      g = await gfx();
+      if (g.body !== 'high' || g.canvas !== 'high') throw new Error(`high not applied: ${JSON.stringify(g)}`);
+      if (!/bloom/.test(g.summary)) throw new Error(`high summary lacks bloom: ${g.summary}`);
+      await page.locator('#set-gfx-bloom').scrollIntoViewIfNeeded();
+      await page.selectOption('#set-gfx-bloom', 'off');
+      g = await gfx();
+      if (g.saved.gfx.bloom !== 'off') throw new Error('bloom override not saved');
+      if (/bloom/.test(g.summary)) throw new Error(`bloom still in summary: ${g.summary}`);
+      await page.screenshot({ path: SHOT('graphics', label) });
+      await page.reload({ waitUntil: 'load' });
+      await page.waitForSelector('#screen-title:not([hidden])', { timeout: 15000 });
+      await page.click('#btn-settings');
+      await page.waitForSelector('#overlay-settings:not([hidden])');
+      g = await gfx();
+      const sel = await page.evaluate(() => [document.querySelector('#set-quality').value, document.querySelector('#set-gfx-bloom').value]);
+      if (g.canvas !== 'high' || sel[0] !== 'high' || sel[1] !== 'off') {
+        throw new Error(`graphics not restored after reload: ${JSON.stringify({ g, sel })}`);
+      }
+      // Choosing a preset clears overrides; finish on Low to keep the run fast.
+      await page.selectOption('#set-quality', 'low');
+      g = await gfx();
+      if (g.saved.gfx.bloom !== undefined || g.canvas !== 'low') throw new Error('preset did not clear overrides');
       await page.click('#btn-settings-close');
       await page.waitForSelector('#overlay-settings[hidden]', { state: 'attached', timeout: 5000 });
     });
