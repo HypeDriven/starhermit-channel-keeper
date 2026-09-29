@@ -304,3 +304,7 @@ QA bar (agents/qa.md) as checkable statements: lesson 1 explains the first mecha
 - Remote achievement grants via `POST /api/v1/achievement` (unlock proofs stay local), and an in-UI daily board tab that merges local and server-validated rows without opening the Scores screen.
 - Remote achievement delivery through `/api/v1/achievement`.
 - A right-rail drawer toggle on compact layouts.
+
+## Browser interference
+
+`browser-guard.js` (loaded from `index.html`) suppresses browser UI that gets in the way of play: the right-click context menu, the iOS long-press callout, copy / cut / paste, and page text selection. Text fields (inputs, textareas, selects, contenteditable) keep normal selection, context menu and clipboard behaviour.
