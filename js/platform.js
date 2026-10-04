@@ -1,132 +1,44 @@
-// Channel Keeper — StarHermit platform adapter.
-// Launch-token lifecycle (fragment read, Bearer, 45-min refresh), profile
-// nickname, cloud-save slot for the progress records, the game's own-server
-// validated daily routes, and read-only platform leaderboards. Everything
-// degrades to local/offline play: no token → localStorage only, and the
-// own-server routes are only called when the local dev backend answers.
-// Tokens are kept in memory only — never persisted.
+// Channel Keeper — StarHermit platform adapter over window.StarHermit
+// (starhermit-sdk.js, loaded and init()ed from index.html before the game
+// modules). The SDK owns the launch token (#game_token / #access_token,
+// memory only), renewal, profile nickname, cloud-save slot game:<slug>,
+// settings KV, control bindings, leaderboards, invite link and sign-in.
+// The game's own-server validated daily routes (server.js, local dev) are
+// only probed when signed in. Standalone (no token) makes no requests.
 
-const REFRESH_MS = 45 * 60 * 1000; // token lives 60 min; re-mint at 45
-const RETRY_MS = 60 * 1000;
 const SAVE_DEBOUNCE_MS = 2000;
+const sdk = () => globalThis.StarHermit || null;
 
-// Minimal ZIP writer/reader (stored entries only, no compression).
-const CRC_TABLE = (() => {
-  const t = new Uint32Array(256);
-  for (let n = 0; n < 256; n++) {
-    let c = n;
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    t[n] = c >>> 0;
-  }
-  return t;
-})();
-function crc32(bytes) {
-  let c = 0xffffffff;
-  for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
-  return (c ^ 0xffffffff) >>> 0;
-}
-function zipStore(name, dataBytes) {
-  const enc = new TextEncoder();
-  const nameB = enc.encode(name);
-  const crc = crc32(dataBytes);
-  const out = [];
-  const u16 = (v) => out.push(v & 0xff, (v >> 8) & 0xff);
-  const u32 = (v) => out.push(v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, (v >>> 24) & 0xff);
-  u32(0x04034b50); u16(20); u16(0); u16(0); u16(0); u16(0);
-  u32(crc); u32(dataBytes.length); u32(dataBytes.length);
-  u16(nameB.length); u16(0);
-  const head = new Uint8Array(out);
-  const cd = [];
-  const c16 = (v) => cd.push(v & 0xff, (v >> 8) & 0xff);
-  const c32 = (v) => cd.push(v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, (v >>> 24) & 0xff);
-  c32(0x02014b50); c16(20); c16(20); c16(0); c16(0); c16(0); c16(0);
-  c32(crc); c32(dataBytes.length); c32(dataBytes.length);
-  c16(nameB.length); c16(0); c16(0); c16(0); c16(0); c32(0); c32(0);
-  const cdHead = new Uint8Array(cd);
-  const cdOff = head.length + nameB.length + dataBytes.length;
-  const parts = [head, nameB, dataBytes, cdHead, nameB];
-  const eocd = [];
-  const e32 = (v) => eocd.push(v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, (v >>> 24) & 0xff);
-  const e16 = (v) => eocd.push(v & 0xff, (v >> 8) & 0xff);
-  e32(0x06054b50); e16(0); e16(0); e16(1); e16(1);
-  e32(cdHead.length + nameB.length); e32(cdOff); e16(0);
-  parts.push(new Uint8Array(eocd));
-  const total = parts.reduce((n, p) => n + p.length, 0);
-  const buf = new Uint8Array(total);
-  let o = 0;
-  for (const p of parts) { buf.set(p, o); o += p.length; }
-  return buf;
-}
-function unzipFirstEntry(zipBytes) {
-  const dv = new DataView(zipBytes.buffer, zipBytes.byteOffset, zipBytes.byteLength);
-  let off = 0;
-  while (off + 30 <= zipBytes.length && dv.getUint32(off, true) === 0x04034b50) {
-    const method = dv.getUint16(off + 8, true);
-    const size = dv.getUint32(off + 18, true);
-    const nameLen = dv.getUint16(off + 26, true);
-    const extraLen = dv.getUint16(off + 28, true);
-    const dataOff = off + 30 + nameLen + extraLen;
-    if (method !== 0) throw new Error('unsupported zip entry');
-    return zipBytes.slice(dataOff, dataOff + size);
-  }
-  throw new Error('bad zip');
-}
-function bytesToBase64(bytes) {
-  let s = '';
-  for (let i = 0; i < bytes.length; i += 0x8000)
-    s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-  return btoa(s);
-}
+// Keyboard actions — declared as control.<action> in starhermit.txt.
+export const DEFAULT_BINDINGS = {
+  up: ['ArrowUp', 'KeyW'], down: ['ArrowDown', 'KeyS'], left: ['ArrowLeft', 'KeyA'], right: ['ArrowRight', 'KeyD'],
+  carve: ['Enter', 'Space'], release: ['KeyR'], undo: ['KeyU'], hint: ['KeyH'], cameraReset: ['KeyC'], pause: ['Escape'],
+};
+// Preferences mirrored to the settings KV (bindings go through controls).
+const SYNCED_SETTINGS = ['volMaster', 'volMusic', 'volEffects', 'volAmbience', 'volVoice', 'muted', 'quality', 'gfx',
+  'reducedMotion', 'palette', 'highContrast', 'largeText', 'leftHanded', 'holdToCarve', 'timingAssist', 'haptics', 'cameraView'];
+const cloneBindings = (b) => Object.fromEntries(Object.entries(b).map(([k, v]) => [k, v.slice()]));
+const KEY_NAMES = { ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Escape: 'Esc' };
 
 export const platform = {
-  token: null,
-  userId: null,
-  slug: null,
-  hosted: false,       // a launch token was read
   ownServer: false,    // the game's own dev backend answered /time
   profile: null,       // { name } for the signed-in player
   sync: 'offline',     // offline | saving | synced (cloud mirror)
+  bindings: cloneBindings(DEFAULT_BINDINGS),
+  _codeMap: null,
   _timeOffset: 0,
-  _refreshTimer: null,
-  _retryTimer: null,
-  _saveTimer: null,
-  _pendingSave: null,
-  _profileNames: {},
   _syncListeners: [],
+  _authListeners: [],
+  _hooked: false,
+  _settingsLoaded: false,
+  _lastSettings: null,
+  _settingsTimer: null,
 
-  /* Token: fragment first (platform contract); query forms are local-dev
-   * only. Stripped from the URL after the read, kept in memory only. */
-  _readLaunchToken() {
-    try {
-      const h = new URLSearchParams(String(location.hash || '').replace(/^#/, ''));
-      const t = h.get('game_token');
-      if (t) {
-        h.delete('game_token');
-        h.delete('session_id');
-        const rest = h.toString();
-        history.replaceState(null, '', location.pathname + location.search + (rest ? '#' + rest : ''));
-        return t;
-      }
-      const q = new URLSearchParams(location.search);
-      return q.get('game_token') || q.get('token') || q.get('launch_token') || null;
-    } catch {
-      return null;
-    }
-  },
-  _decodeJwt(t) {
-    try {
-      const seg = String(t).split('.')[1];
-      if (!seg) return null;
-      let b64 = seg.replace(/-/g, '+').replace(/_/g, '/');
-      b64 += '='.repeat((4 - (b64.length % 4)) % 4);
-      const bin = atob(b64);
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      return JSON.parse(new TextDecoder().decode(bytes));
-    } catch {
-      return null;
-    }
-  },
+  get token() { const s = sdk(); return s ? s.token : null; },
+  get userId() { const s = sdk(); return s ? s.userId : null; },
+  get slug() { const s = sdk(); return s ? s.slug : null; },
+  get hosted() { const s = sdk(); return !!(s && s.signedIn); },
+
   headers(extra) {
     const h = extra || {};
     if (this.token) h.Authorization = `Bearer ${this.token}`;
@@ -134,19 +46,16 @@ export const platform = {
   },
 
   async init() {
-    this.token = this._readLaunchToken();
-    if (this.token) {
-      const claims = this._decodeJwt(this.token);
-      if (!claims) this.token = null;
-      else {
-        if (typeof claims.sub === 'string' && claims.sub) this.userId = claims.sub;
-        if (typeof claims.game_scope === 'string' && claims.game_scope) this.slug = claims.game_scope;
-        if (!this.userId || !this.slug) this.token = null;
-      }
+    const s = sdk();
+    if (s && !this._hooked) {
+      this._hooked = true;
+      s.on('saved', (ok) => this._setSync(ok ? 'synced' : 'offline'));
+      s.on('auth', (a) => {
+        if (!a.signedIn) { this.profile = null; this.ownServer = false; this._setSync('offline'); }
+        for (const fn of this._authListeners) { try { fn(a); } catch { /* ignore */ } }
+      });
     }
-    this.hosted = !!this.token;
     if (this.hosted) {
-      this._scheduleRefresh();
       try {
         window.addEventListener('pagehide', () => this.flushSave());
         document.addEventListener('visibilitychange', () => { if (document.hidden) this.flushSave(); });
@@ -155,46 +64,24 @@ export const platform = {
     }
     return { hosted: this.hosted };
   },
+  onAuth(fn) { if (typeof fn === 'function') this._authListeners.push(fn); },
+  canSignIn() { const s = sdk(); return !!(s && s.canSignIn()); },
+  signIn() { const s = sdk(); return !!(s && s.signIn()); },
+  inviteLink() { const s = sdk(); return s && s.signedIn ? s.inviteLink() : null; },
+  async copyInvite() {
+    const link = this.inviteLink();
+    if (!link) return false;
+    try { await navigator.clipboard.writeText(link); return true; } catch { return false; }
+  },
+  refreshToken() { const s = sdk(); return s ? s.refresh() : Promise.resolve(null); },
 
-  /* Token refresh: scoped tokens may re-mint via the game's launch-token
-   * route. Retry a failed re-mint after ~60 s. */
-  _scheduleRefresh() {
-    if (this._refreshTimer) clearInterval(this._refreshTimer);
-    this._refreshTimer = setInterval(() => this.refreshToken(), REFRESH_MS);
-  },
-  refreshToken() {
-    if (!this.token || !this.slug) return Promise.resolve(false);
-    return fetch(`/api/v1/games/${encodeURIComponent(this.slug)}/launch-token`, {
-      method: 'POST', headers: this.headers({ 'Content-Type': 'application/json' }), body: '{}',
-    }).then((r) => r.json().catch(() => null)).then((j) => {
-      if (j && typeof j.token === 'string' && j.token) {
-        this.token = j.token;
-        const claims = this._decodeJwt(this.token);
-        if (claims && claims.sub) this.userId = claims.sub;
-        if (claims && claims.game_scope) this.slug = claims.game_scope;
-        return true;
-      }
-      this._retryRefresh();
-      return false;
-    }).catch(() => { this._retryRefresh(); return false; });
-  },
-  _retryRefresh() {
-    if (this._retryTimer || !this.token) return;
-    this._retryTimer = setTimeout(() => { this._retryTimer = null; this.refreshToken(); }, RETRY_MS);
-  },
-
-  /* Identity: the profile nickname is the only profile read a game-scoped
-   * token may make (never /api/v1/me, never usernames). Cached per id. */
+  /* Identity: the profile nickname (never /api/v1/me, never usernames). */
   profileFor(userId) {
     if (!userId || typeof userId !== 'string') return Promise.resolve('player');
-    if (this._profileNames[userId]) return this._profileNames[userId];
-    const p = fetch(`/api/v1/users/${encodeURIComponent(userId)}/profile`, { headers: this.headers() })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => (j && typeof j.nickname === 'string' && j.nickname ? j.nickname : null))
-      .then((n) => n || (`Player ${userId.slice(0, 8)}`))
-      .catch(() => `Player ${userId.slice(0, 8)}`);
-    this._profileNames[userId] = p;
-    return p;
+    const s = sdk();
+    if (!s || !s.signedIn) return Promise.resolve('Player ' + userId.slice(0, 6));
+    return s.profile(userId).then((p) => (p && p.displayName) || 'Player ' + userId.slice(0, 6))
+      .catch(() => 'Player ' + userId.slice(0, 6));
   },
   async fetchProfile() {
     if (!this.userId) return null;
@@ -203,8 +90,9 @@ export const platform = {
     return this.profile;
   },
 
-  /* Server time (own backend or platform); local clock otherwise. */
+  /* Server time from the own backend (signed in only); local clock otherwise. */
   async syncTime() {
+    if (!this.hosted) return false;
     try {
       const t0 = Date.now();
       const r = await fetch('/api/v1/time', { cache: 'no-store', headers: this.headers() });
@@ -222,57 +110,22 @@ export const platform = {
   },
   now() { return new Date(Date.now() + this._timeOffset); },
 
-  /* Cloud save: ONE zip+base64 slot at /api/v1/me/cloud-saves/{slug} holding
-   * the {settings, progress, achievements, boards} records. Remote wins on
-   * boot; saves debounce ~2 s and flush on pagehide/hidden with keepalive;
-   * localStorage stays the offline cache. */
+  /* Cloud save: the SDK slot game:<slug> holds the {settings, progress,
+   * achievements, boards} records. Remote wins on boot; saves debounce ~2 s
+   * and flush on pagehide/hidden; localStorage stays the offline cache. */
   async loadCloud() {
-    if (!this.hosted || !this.slug) return null;
-    try {
-      const res = await fetch(`/api/v1/me/cloud-saves/${encodeURIComponent(this.slug)}`, { headers: this.headers() });
-      if (res.status === 404) return null;
-      if (!res.ok) throw new Error(`http-${res.status}`);
-      const buf = await res.arrayBuffer();
-      if (!buf || !buf.byteLength) return null;
-      return JSON.parse(new TextDecoder().decode(unzipFirstEntry(new Uint8Array(buf))));
-    } catch {
-      return null;
-    }
+    if (!this.hosted) return null;
+    try { return await sdk().loadJSON(); } catch { return null; }
   },
   saveCloud(doc) {
-    if (!this.hosted || !this.slug) return Promise.resolve(false);
-    this._pendingSave = doc;
+    if (!this.hosted) return Promise.resolve(false);
     this._setSync('saving');
-    if (this._saveTimer) clearTimeout(this._saveTimer);
-    this._saveTimer = setTimeout(() => this.flushSave(), SAVE_DEBOUNCE_MS);
+    sdk().saveJSON(doc, SAVE_DEBOUNCE_MS);
     return Promise.resolve(true);
   },
   flushSave() {
-    if (this._saveTimer) { clearTimeout(this._saveTimer); this._saveTimer = null; }
-    if (!this.hosted || !this.slug || this._pendingSave == null) return Promise.resolve(false);
-    const doc = this._pendingSave;
-    this._pendingSave = null;
-    let body;
-    try {
-      body = { dataBase64: bytesToBase64(zipStore('save.json', new TextEncoder().encode(JSON.stringify(doc)))) };
-    } catch {
-      return Promise.resolve(false);
-    }
-    return fetch(`/api/v1/me/cloud-saves/${encodeURIComponent(this.slug)}`, {
-      method: 'PUT',
-      headers: this.headers({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify(body),
-      keepalive: true,
-    }).then((res) => {
-      if (res.ok) { this._setSync('synced'); return true; }
-      this._pendingSave = this._pendingSave == null ? doc : this._pendingSave;
-      this._setSync('offline');
-      return false;
-    }).catch(() => {
-      this._pendingSave = this._pendingSave == null ? doc : this._pendingSave;
-      this._setSync('offline');
-      return false;
-    });
+    if (!this.hosted) return Promise.resolve(false);
+    return sdk().flushSave(true);
   },
   onSync(fn) { if (typeof fn === 'function') this._syncListeners.push(fn); },
   _setSync(state) {
@@ -281,6 +134,50 @@ export const platform = {
     for (const fn of this._syncListeners) {
       try { fn(state); } catch { /* listener errors never break the adapter */ }
     }
+  },
+
+  /* Settings KV: preferences only; the platform value wins at boot. */
+  async getSettings() {
+    if (!this.hosted) return {};
+    let kv = {};
+    try { kv = (await sdk().getSettings()) || {}; } catch { kv = {}; }
+    this._settingsLoaded = true;
+    const out = {};
+    for (const k of SYNCED_SETTINGS) if (kv[k] !== undefined && kv[k] !== null) out[k] = kv[k];
+    return out;
+  },
+  /** Debounced patch of changed preferences (only after the KV was read). */
+  mirrorSettings(settings) {
+    if (!this.hosted || !this._settingsLoaded) return;
+    const patch = {};
+    for (const k of SYNCED_SETTINGS) if (settings[k] !== undefined) patch[k] = settings[k];
+    const json = JSON.stringify(patch);
+    if (json === this._lastSettings) return;
+    clearTimeout(this._settingsTimer);
+    this._settingsTimer = setTimeout(() => {
+      this._lastSettings = json;
+      sdk().patchSettings(patch).catch(() => {});
+    }, 800);
+  },
+
+  /* Controls: platform overrides over DEFAULT_BINDINGS. */
+  async loadBindings() {
+    const s = sdk();
+    if (s && s.signedIn) {
+      try { this.bindings = await s.loadBindings(DEFAULT_BINDINGS); } catch { /* defaults */ }
+    }
+    this._codeMap = null;
+    return this.bindings;
+  },
+  actionFor(e) {
+    if (!this._codeMap) {
+      this._codeMap = {};
+      for (const [a, codes] of Object.entries(this.bindings)) for (const c of codes) this._codeMap[c] = a;
+    }
+    return this._codeMap[e.code] || null;
+  },
+  keyLabel(action) {
+    return (this.bindings[action] || []).map((c) => KEY_NAMES[c] || c.replace(/^Key|^Digit/, '')).join(' / ');
   },
 
   /* Own-server validated daily routes (declared server=server.js). Only
@@ -307,28 +204,6 @@ export const platform = {
       if (!res.ok) return null;
       const j = await res.json();
       return Array.isArray(j.entries) ? j.entries : [];
-    } catch {
-      return null;
-    }
-  },
-
-  /* Platform leaderboard (read-only; clients never submit). Entries resolve
-   * to profile nicknames. */
-  async fetchLeaderboard() {
-    if (!this.hosted || !this.slug) return null;
-    try {
-      const game = await (await fetch(`/api/v1/games/${encodeURIComponent(this.slug)}`, { headers: this.headers() })).json();
-      const leaderboardId = game && game.leaderboardId;
-      if (!leaderboardId) return null;
-      const res = await fetch(`/api/v1/leaderboards/${encodeURIComponent(leaderboardId)}/entries?page=1&pageSize=20`, { headers: this.headers() });
-      if (!res.ok) return null;
-      const j = await res.json();
-      const raw = (j.entries || j.items) || [];
-      return Promise.all(raw.slice(0, 20).map(async (e) => {
-        const uid = e.userId != null ? e.userId : e.playerId;
-        const name = uid ? await this.profileFor(String(uid)) : (e.name || 'player');
-        return { name, score: e.score != null ? e.score : e.value, you: String(uid || '') === this.userId };
-      }));
     } catch {
       return null;
     }

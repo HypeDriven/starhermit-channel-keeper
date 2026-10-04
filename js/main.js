@@ -17,6 +17,9 @@ import { AudioEngine } from './audio.js';
 import { CATEGORIES, PRESETS, resolve, presetTier, choosePreset, describe } from './gfx.js';
 import { gfxStrings, pickLocale } from './gfx-i18n.js';
 import { platform } from './platform.js';
+import { platformStrings } from './platform-strings.js';
+
+const PT = platformStrings(navigator.language); // StarHermit UI strings
 import { $, $$, showScreen, openOverlay, closeOverlay, anyOverlayOpen, topOverlay,
   announce, toast, caption, fmtInt } from './ui.js';
 
@@ -43,6 +46,7 @@ function track(event, data = {}) {
 }
 
 async function syncServerTime() {
+  if (!platform.hosted) return; // standalone: local clock, no requests
   try {
     await platform.syncTime();
   } catch { /* offline: local clock */ }
@@ -53,6 +57,7 @@ async function syncServerTime() {
 function renderProfileLine() {
   const line = $('#profile-line');
   if (!line) return;
+  renderPlatformButtons();
   if (!platform.hosted) {
     line.textContent = 'Playing as guest — progress is stored locally.';
     return;
@@ -62,6 +67,13 @@ function renderProfileLine() {
     : platform.sync === 'saving' ? 'saving…'
     : 'cloud sync unavailable';
   line.textContent = `Playing as ${name} · ${syncTxt}`;
+}
+
+// Sign-in (platform host, no token) and invite (signed in) buttons on the title.
+function renderPlatformButtons() {
+  const signIn = $('#btn-signin'), invite = $('#btn-invite');
+  if (signIn) { signIn.textContent = PT.signIn; signIn.hidden = !platform.canSignIn(); }
+  if (invite) { invite.textContent = PT.invite; invite.hidden = !platform.hosted; }
 }
 
 // ---------------------------------------------------------------- game state
@@ -660,11 +672,10 @@ function pickCell(e) {
 function bindKeyboard() {
   document.addEventListener('keydown', (e) => {
     if (e.target.matches('input, select, textarea')) return;
-    const b = settings.bindings;
-    const code = e.code;
+    const act = platform.actionFor(e);
 
     if (anyOverlayOpen()) {
-      if (code === b.pause || code === 'Escape') {
+      if (act === 'pause' || e.code === 'Escape') {
         const top = topOverlay();
         if (top === 'overlay-pause') { resumeGame(); e.preventDefault(); }
         else if (top !== 'overlay-results') { closeOverlay(top); e.preventDefault(); }
@@ -682,18 +693,17 @@ function bindKeyboard() {
       audio.event('ui');
       e.preventDefault();
     };
-    switch (code) {
-      case b.up: case b.altUp: move(0, -1); break;
-      case b.down: case b.altDown: move(0, 1); break;
-      case b.left: case b.altLeft: move(-1, 0); break;
-      case b.right: case b.altRight: move(1, 0); break;
-      case b.carve: case 'Space':
-        tryCarve(game.cursor.x, game.cursor.y); e.preventDefault(); break;
-      case b.release: doRelease(); e.preventDefault(); break;
-      case b.undo: doUndo(); e.preventDefault(); break;
-      case b.hint: doHint(); e.preventDefault(); break;
-      case b.cameraReset: renderer?.resetCamera(); e.preventDefault(); break;
-      case b.pause: pauseGame(); e.preventDefault(); break;
+    switch (act) {
+      case 'up': move(0, -1); break;
+      case 'down': move(0, 1); break;
+      case 'left': move(-1, 0); break;
+      case 'right': move(1, 0); break;
+      case 'carve': tryCarve(game.cursor.x, game.cursor.y); e.preventDefault(); break;
+      case 'release': doRelease(); e.preventDefault(); break;
+      case 'undo': doUndo(); e.preventDefault(); break;
+      case 'hint': doHint(); e.preventDefault(); break;
+      case 'cameraReset': renderer?.resetCamera(); e.preventDefault(); break;
+      case 'pause': pauseGame(); e.preventDefault(); break;
     }
   });
 }
@@ -1033,11 +1043,22 @@ function applySettingsToUI() {
   document.body.classList.toggle('large-text', settings.largeText);
   document.body.classList.toggle('left-handed', settings.leftHanded);
   // Help card reflects current control mappings.
-  const b = settings.bindings;
+  const k = (a) => platform.keyLabel(a);
   $('#help-keys').textContent =
-    `Move cursor: arrows / WASD · Dig: ${b.carve} · Release: ${b.release.replace('Key', '')} · ` +
-    `Undo: ${b.undo.replace('Key', '')} · Hint: ${b.hint.replace('Key', '')} · Pause: Esc · ` +
+    `Move cursor: ${k('up')}, ${k('left')}, ${k('down')}, ${k('right')} · Dig: ${k('carve')} · Release: ${k('release')} · ` +
+    `Undo: ${k('undo')} · Hint: ${k('hint')} · Reset camera: ${k('cameraReset')} · Pause: ${k('pause')} · ` +
     'Gamepad: stick/d-pad move, A dig, X release, Y hint, Start pause.';
+}
+
+/** Reflect `settings` into the settings form (after cloud/KV values land). */
+function syncSettingsForm() {
+  for (const [id, key] of [['set-master', 'volMaster'], ['set-music', 'volMusic'], ['set-effects', 'volEffects'],
+    ['set-ambience', 'volAmbience'], ['set-voice', 'volVoice']]) $(`#${id}`).value = settings[key];
+  for (const [id, key] of [['set-muted', 'muted'], ['set-motion', 'reducedMotion'], ['set-contrast', 'highContrast'],
+    ['set-largetext', 'largeText'], ['set-lefthand', 'leftHanded'], ['set-hold', 'holdToCarve'],
+    ['set-timing', 'timingAssist'], ['set-haptics', 'haptics']]) $(`#${id}`).checked = !!settings[key];
+  $('#set-palette').value = settings.palette;
+  $('#set-camera').value = settings.cameraView;
 }
 
 function bindSettings() {
@@ -1299,6 +1320,16 @@ async function boot() {
   onRecordsChange(() => {
     if (!platform.hosted) return;
     platform.saveCloud({ settings, progress, achievements: loadAchievements(), boards: loadBoards() });
+    platform.mirrorSettings(settings);
+  });
+  $('#btn-signin').addEventListener('click', () => platform.signIn());
+  $('#btn-invite').addEventListener('click', async () => {
+    const ok = await platform.copyInvite();
+    toast(ok ? PT.inviteCopied : PT.inviteFailed);
+  });
+  platform.onAuth((a) => {
+    if (!a.signedIn) toast(PT.signedOut, 4000);
+    renderProfileLine();
   });
 
   step(35, 'Synchronising clock…');
@@ -1320,8 +1351,16 @@ async function boot() {
       if (remote.achievements) saveAchievements(Object.assign(loadAchievements(), remote.achievements));
       if (remote.boards) saveBoards(remote.boards);
     }
-    renderProfileLine();
+    // Platform settings KV wins over the saved preferences.
+    const kv = await platform.getSettings();
+    if (Object.keys(kv).length) { Object.assign(settings, kv); saveSettings(settings); }
+    syncSettingsForm();
+    applySettingsToUI();
+    audio.applyVolumes();
   }
+  await platform.loadBindings();
+  applySettingsToUI();
+  renderProfileLine();
 
   step(60, 'Building scene…');
   await initRenderer();

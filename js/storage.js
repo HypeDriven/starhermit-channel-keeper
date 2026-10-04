@@ -82,19 +82,13 @@ export const DEFAULT_SETTINGS = {
   // gameplay
   cameraView: 'fit',          // fit | close
   tutorialsDone: [],
-  // input overrides: action -> KeyboardEvent.code
-  bindings: {
-    carve: 'Enter', release: 'KeyR', undo: 'KeyU', pause: 'Escape',
-    hint: 'KeyH', cameraReset: 'KeyC',
-    up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight',
-    altUp: 'KeyW', altDown: 'KeyS', altLeft: 'KeyA', altRight: 'KeyD',
-  },
+  // keyboard bindings live in the platform adapter (StarHermit controls)
 };
 
 export function loadSettings() {
   const s = read('settings', {});
   const merged = Object.assign({}, DEFAULT_SETTINGS, s);
-  merged.bindings = Object.assign({}, DEFAULT_SETTINGS.bindings, s.bindings || {});
+  delete merged.bindings; // pre-SDK per-save bindings; StarHermit controls own them now
   merged.gfx = Object.assign({}, s.gfx && typeof s.gfx === 'object' ? s.gfx : {});
   if (merged.quality === 'medium') merged.quality = 'balanced'; // pre-preset tier name
   return merged;

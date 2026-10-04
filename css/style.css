@@ -356,3 +356,8 @@ body.left-handed .tray { direction: rtl; }
 
 /* Reduced motion: kill CSS transitions too */
 body.reduced-motion * { transition: none !important; animation: none !important; }
+
+/* StarHermit title buttons (sign in / invite); the row collapses when both are hidden */
+.platform-row { margin-top: 0.5rem; justify-content: center; }
+.platform-row .btn[hidden] { display: none; }
+.platform-row:not(:has(.btn:not([hidden]))) { display: none; }
