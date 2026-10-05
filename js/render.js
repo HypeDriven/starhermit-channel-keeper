@@ -946,9 +946,14 @@ export class BoardRenderer {
   }
 
   /** Pixel ratio = min(dpr, preset cap) × preset/user scale × adaptive scale. */
+  _ratio() {
+    // × UIScale: the canvas sits inside the zoomed #app, so its backing store grows with the zoom.
+    const base = Math.min(window.devicePixelRatio || 1, this.q.dprCap || 2) * ((window.UIScale && UIScale.value) || 1);
+    return Math.max(0.3, base * this.q.scale * this.adaptiveScale);
+  }
+
   _applySize(wpx, hpx) {
-    const base = Math.min(window.devicePixelRatio || 1, this.q.dprCap || 2);
-    const ratio = Math.max(0.3, base * this.q.scale * this.adaptiveScale);
+    const ratio = this._ratio();
     if (wpx !== this.size[0] || hpx !== this.size[1] || ratio !== this.pixelRatio) {
       this.size = [wpx, hpx];
       this.pixelRatio = ratio;
@@ -969,7 +974,7 @@ export class BoardRenderer {
     const wpx = this.container.clientWidth || 1;
     const hpx = this.container.clientHeight || 1;
     if (rescale || wpx !== this.size[0] || hpx !== this.size[1] ||
-        Math.min(window.devicePixelRatio || 1, this.q.dprCap) * this.q.scale * this.adaptiveScale !== this.pixelRatio) {
+        this._ratio() !== this.pixelRatio) {
       if (wpx !== this.size[0] || hpx !== this.size[1]) {
         this.camera.aspect = wpx / hpx;
         this.camera.updateProjectionMatrix();
