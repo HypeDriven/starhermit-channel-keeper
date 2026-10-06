@@ -31,7 +31,11 @@ export function openOverlay(id) {
   overlayStack.push({ id, restore: document.activeElement });
   el.hidden = false;
   const first = el.querySelector('.btn-primary') || el.querySelector(FOCUSABLE);
-  if (first) first.focus();
+  // the primary button is often Done at the foot of a tall sheet: focus it
+  // without scrolling and open the sheet at its heading
+  if (first) first.focus({ preventScroll: true });
+  el.scrollTop = 0;
+  el.querySelectorAll('.sheet').forEach((sh) => { sh.scrollTop = 0; });
   el._trap = (e) => {
     if (e.key !== 'Tab') return;
     const items = Array.from(el.querySelectorAll(FOCUSABLE)).filter((b) => !b.disabled);
@@ -81,8 +85,14 @@ export function toast(text, ms = 2600) {
   if (!el) return;
   el.textContent = text;
   el.hidden = false;
+  // open overlays (results, pause…) end above the toast instead of under it
+  const app = $('#app');
+  app?.style.setProperty('--toast-room', (el.offsetHeight + 8) + 'px');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.hidden = true; }, ms);
+  toastTimer = setTimeout(() => {
+    el.hidden = true;
+    app?.style.removeProperty('--toast-room');
+  }, ms);
 }
 
 let captionTimer = null;
