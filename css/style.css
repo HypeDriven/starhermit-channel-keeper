@@ -366,3 +366,21 @@ body.reduced-motion * { transition: none !important; animation: none !important;
 .platform-row { margin-top: 0.5rem; justify-content: center; }
 .platform-row .btn[hidden] { display: none; }
 .platform-row:not(:has(.btn:not([hidden]))) { display: none; }
+
+/* Phone landscape: key art beside the menu so the whole title fits ~390px */
+@media (orientation: landscape) and (max-height: 540px) {
+  #screen-title:has(.title-art:not([hidden])) {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 22rem);
+    column-gap: 1.5rem; row-gap: 0.4rem; align-content: safe center; justify-content: center;
+    padding-block: calc(0.5rem + var(--safe-t)) calc(0.5rem + var(--safe-b));
+  }
+  #screen-title:has(.title-art:not([hidden])) > * { grid-column: 2; }
+  #screen-title:has(.title-art:not([hidden])) > .title-art {
+    grid-column: 1; grid-row: 1 / span 5; width: 100%; max-height: none; align-self: center;
+  }
+  #screen-title .title-head { margin-top: 0; }
+  #screen-title .logo { font-size: 2rem; margin: 0; }
+  #screen-title .tagline { margin: 0; font-size: 0.85rem; }
+  #screen-title .title-menu { gap: 0.4rem; }
+  #screen-title #profile-line { margin: 0; }
+}
