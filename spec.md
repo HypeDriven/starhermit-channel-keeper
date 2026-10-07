@@ -34,11 +34,12 @@
 | `js/storage.js` | Versioned + checksummed localStorage documents: settings, progress, achievements, session snapshot, boards |
 | `js/ui.js` | Screen switching, overlay stack with focus trap/restore, `announce`, `toast`, `caption`, `fmtInt` |
 | `js/main.js` | Controller: boot, screen flow, input (pointer/keyboard/gamepad), HUD, tutorials, mirror grid, results, progression, replay watch, telemetry |
-| `server.js` | StarHermit game script: static files, `/api/v1/*` (time, version, daily, replay-validated submit, board, achievement, events, presence) |
+| `score-script.js` | StarHermit platform script (`server=`): range-checks a finished round's total and posts it to the `high-score` leaderboard (canonical copy in the games repo's `tools/score-script.js`) |
+| `server.js` | Local dev server: static files, `/api/v1/*` (time, version, daily, replay-validated submit, board, achievement, events, presence) |
 | `assets/` | `key-art.webp` (title), `well-filled.webp`, `water-spent.webp` (results illustrations) |
 | `sfx/` | 17 Opus clips, `manifest.txt` (canonical), `manifest.json` (generator input), `manifest.md` |
 | `coverart.png`, `icon.png`, `favicon.svg` | Platform cover (1200×675), icon, tab icon |
-| `starhermit.txt` | `name`, `launch=index.html`, `owner`, `server=server.js`, `cover=coverart.png` |
+| `starhermit.txt` | `name`, `launch=index.html`, `owner`, `server=score-script.js`, `cover=coverart.png` |
 | `tests/run-tests.mjs` | 28 rules/content tests (`npm test`) |
 | `tests/gfx.test.mjs` | 7 `node --test` tests for `gfx.js` and the graphics strings (`npm test`) |
 | `tests/platform.test.mjs` | `node --test` tests for the StarHermit adapter over the SDK (`npm test`) |
@@ -244,7 +245,7 @@ The Graphics settings section (`js/gfx-i18n.js`) is localized into en-US, en-GB,
 
 ## 12. StarHermit integration
 
-Manifest `starhermit.txt` declares `name`, `launch=index.html`, `owner`, `server=server.js`, `cover=coverart.png` per https://wiki.starhermit.com/ conventions. The **server script** (`server.js`) serves the distribution and exposes `GET /api/v1/time`, `GET /api/v1/version`, `GET /api/v1/daily` (key, seed, content version), `POST /api/v1/daily/submit` (replay-validated: schema, content version, ≤20 000 commands, seed must match the day's level, today's UTC board only, `stateHash` must match a fresh `replay`, one row per player, top 200, 30 requests/min), `GET /api/v1/daily/board`, `POST /api/v1/achievement` (idempotent, known keys only), `POST /api/v1/events` and `POST /api/v1/presence` (accepted sinks).
+Manifest `starhermit.txt` declares `name`, `launch=index.html`, `owner`, `server=score-script.js`, `cover=coverart.png` per https://wiki.starhermit.com/ conventions. The **platform script** (`score-script.js`) accepts a `{type:'result', scores}` message on a practice session, range-checks each score against its board and returns it as the session's `scores`. The **local dev server** (`server.js`) serves the distribution and exposes `GET /api/v1/time`, `GET /api/v1/version`, `GET /api/v1/daily` (key, seed, content version), `POST /api/v1/daily/submit` (replay-validated: schema, content version, ≤20 000 commands, seed must match the day's level, today's UTC board only, `stateHash` must match a fresh `replay`, one row per player, top 200, 30 requests/min), `GET /api/v1/daily/board`, `POST /api/v1/achievement` (idempotent, known keys only), `POST /api/v1/events` and `POST /api/v1/presence` (accepted sinks).
 
 `index.html` loads `starhermit-sdk.js` (the canonical client, shipped unchanged) and calls `StarHermit.init()` before the game modules; `js/platform.js` is the game's adapter over `window.StarHermit`. Without a token the game makes no network requests.
 
@@ -258,10 +259,11 @@ Manifest `starhermit.txt` declares `name`, `launch=index.html`, `owner`, `server
 | Controls | yes | Ten keyboard actions are declared as `control.*` in `starhermit.txt`; boot resolves `loadBindings()`, keydown routes by `event.code` through them, and the Help card lists the effective keys |
 | Invite link | yes | Signed in, the title shows **Invite a friend**, copying `StarHermit.inviteLink()` with a confirmation toast |
 | Own-server routes | signed in only | `GET /api/v1/time` dates the Daily key; daily wins post their replay to `POST /api/v1/daily/submit` (rank toasted) and the Scores screen shows `GET /api/v1/daily/board` beside the local board — only when the own backend answers. `POST /api/v1/events` beacons are local-dev only |
-| Platform leaderboards / achievements | no | `server.js` is the game's own Node server, not a platform session script, so it reports no platform scores or achievements; achievements stay local in the save doc |
+| Platform leaderboard | yes | Signed in, every finished Journey, Daily or Challenge round (not Learn, Practice or an abandoned round) posts its total through `StarHermit.submitScores` (`platform.submitScore`) to the `high-score` board (integer, higher is better, 0–100,000); the results sheet's `#results-lb` line shows "Leaderboard rank: #N" (or posted / not posted). Standalone posts nothing and the line stays hidden |
+| Platform achievements | no | Achievements stay local in the save doc |
 | Sessions, matchmaking, session invites, chat, replays, realtime, voice | no | Single-player puzzle with no platform sessions |
 
-New platform UI strings ship in all nine locales (`js/platform-strings.js`, picked from `navigator.language`).
+New platform UI strings (including the leaderboard line) ship in all nine locales (`js/platform-strings.js`, picked from `navigator.language`).
 
 ## 13. Technical architecture
 

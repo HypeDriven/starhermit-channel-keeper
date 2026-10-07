@@ -180,6 +180,20 @@ export const platform = {
     return (this.bindings[action] || []).map((c) => KEY_NAMES[c] || c.replace(/^Key|^Digit/, '')).join(' / ');
   },
 
+  /* Post a finished round's total to the platform leaderboard (score-script.js).
+   * Resolves { posted, rank } — rank on the high-score board, or null. */
+  async submitScore(total) {
+    const s = sdk();
+    if (!s || !this.hosted) return { posted: false, rank: null };
+    const keys = await s.submitScores({ 'high-score': total });
+    if (!keys.includes('high-score')) return { posted: false, rank: null };
+    try {
+      const r = await s.leaderboard('high-score', { pageSize: 100 });
+      const me = ((r && r.items) || []).find((i) => i.userId === s.userId);
+      return { posted: true, rank: me ? me.rank : null };
+    } catch { return { posted: true, rank: null }; }
+  },
+
   /* Own-server validated daily routes (declared server=server.js). Only
    * called when the own backend was detected; failures are silent. */
   async submitDaily(dailyKey, envelope) {

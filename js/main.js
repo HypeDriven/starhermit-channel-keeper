@@ -17,7 +17,7 @@ import { AudioEngine } from './audio.js';
 import { CATEGORIES, PRESETS, resolve, presetTier, choosePreset, describe } from './gfx.js';
 import { gfxStrings, pickLocale } from './gfx-i18n.js';
 import { platform } from './platform.js';
-import { platformStrings } from './platform-strings.js';
+import { platformStrings, fmtPlatform } from './platform-strings.js';
 
 const PT = platformStrings(navigator.language); // StarHermit UI strings
 import { $, $$, showScreen, openOverlay, closeOverlay, anyOverlayOpen, topOverlay,
@@ -316,11 +316,29 @@ function handleEvents(events, state) {
   updateCursor();
 }
 
+// Hosted play only: post ranked rounds (not Learn/Practice/abandoned) to the
+// platform high-score board and show the rank on the results sheet.
+let lbSeq = 0;
+function postToLeaderboard(r) {
+  const line = $('#results-lb');
+  const seq = ++lbSeq;
+  line.hidden = true;
+  if (!platform.hosted || game.mode === 'practice' || game.mode === 'learn' || r.reason === 'abandoned') return;
+  line.hidden = false;
+  line.textContent = PT.lbPosting;
+  platform.submitScore(r.score.total).then((res) => {
+    if (seq !== lbSeq) return;
+    line.textContent = !res.posted ? PT.lbNotPosted
+      : res.rank ? fmtPlatform(PT.lbRank, { rank: res.rank }) : PT.lbPosted;
+  });
+}
+
 function handleTerminal(results) {
   audio.event(results.won ? 'win' : 'lose');
   $('#btn-skip').hidden = true;
   applyResults(results);
   showResults(results);
+  postToLeaderboard(results);
   track('round_end', { mode: game.mode, won: results.won, reason: results.reason });
 }
 
