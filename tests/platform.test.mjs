@@ -59,3 +59,22 @@ test('standalone: no token, no network', async () => {
     assert.deepEqual(st.calls, []);
   } finally { st.restore(); }
 });
+
+test('save-conflict merge keeps the better of both devices', async () => {
+  const { mergeRecords } = await import('../js/storage.js');
+  const m = mergeRecords(
+    { progress: { journeyCompleted: { a: { score: 50, won: true } }, journeyBest: { a: 50 }, daily: { d: { score: 10, won: true } }, dailyDays: ['d'], totalCleanWater: 40, cleanWins: 2, sessionsPlayed: 3 },
+      achievements: { first_flow: 500 }, boards: { journey: [{ score: 5, sessionId: 's1', durationTicks: 9 }] } },
+    { progress: { journeyCompleted: { a: { score: 80, won: true }, b: { score: 20, won: true } }, journeyBest: { a: 80 }, daily: { e: { score: 7, won: true } }, dailyDays: ['e'], totalCleanWater: 90, cleanWins: 1, sessionsPlayed: 7 },
+      achievements: { first_flow: 100, streak_3: 300 }, boards: { journey: [{ score: 9, sessionId: 's2', durationTicks: 9 }, { score: 5, sessionId: 's1', durationTicks: 9 }] } });
+  assert.equal(m.progress.journeyCompleted.a.score, 80);
+  assert.ok(m.progress.journeyCompleted.b.won);
+  assert.equal(m.progress.journeyBest.a, 80);
+  assert.deepEqual(Object.keys(m.progress.daily).sort(), ['d', 'e']);
+  assert.deepEqual(m.progress.dailyDays, ['d', 'e']);
+  assert.equal(m.progress.totalCleanWater, 90);
+  assert.equal(m.progress.cleanWins, 2);
+  assert.equal(m.progress.sessionsPlayed, 7);
+  assert.deepEqual(m.achievements, { first_flow: 100, streak_3: 300 });
+  assert.deepEqual(m.boards.journey.map((e) => e.sessionId), ['s2', 's1']);
+});

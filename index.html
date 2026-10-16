@@ -29,7 +29,7 @@
   <!-- ============ BOOT ============ -->
   <section id="screen-boot" class="screen" aria-label="Loading">
     <div class="boot-box">
-      <h1 class="logo">Channel Keeper</h1>
+      <h1 class="logo" data-i18n-skip>Channel Keeper</h1>
       <div class="progress"><div id="boot-bar" class="progress-bar" style="width:5%"></div></div>
       <p id="boot-status">Loading…</p>
     </div>
@@ -38,7 +38,7 @@
   <!-- ============ TITLE ============ -->
   <section id="screen-title" class="screen" hidden aria-labelledby="title-h">
     <header class="title-head">
-      <h1 id="title-h" class="logo">Channel Keeper</h1>
+      <h1 id="title-h" class="logo" data-i18n-skip>Channel Keeper</h1>
       <p class="tagline">Carve the earth. Guide the water. Keep it clean.</p>
     </header>
     <img id="title-art" class="title-art" src="assets/key-art.webp" alt=""
@@ -320,6 +320,9 @@
   <div id="toast" class="toast" role="status" hidden></div>
 </div>
 
+<script src="sh-language.js"></script>
+<script src="js/strings.js"></script>
+<script src="js/i18n.js"></script>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>

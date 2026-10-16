@@ -80,10 +80,18 @@ export function announce(text, assertive = false) {
 }
 
 let toastTimer = null;
+/** Localized text (js/i18n.js); English source strings are the keys. */
+export const tr = (key, vars) => (globalThis.CKI18N ? globalThis.CKI18N.T(key, vars) : key);
+/** Marks an English key that is translated with tr() when shown. */
+export const N = (s) => s;
+
+let toastText = null;
+/** text may be a function so a visible toast follows a language change. */
 export function toast(text, ms = 2600) {
   const el = $('#toast');
   if (!el) return;
-  el.textContent = text;
+  toastText = text;
+  el.textContent = typeof text === 'function' ? text() : text;
   el.hidden = false;
   // open overlays (results, pause…) end above the toast instead of under it
   const app = $('#app');
@@ -102,6 +110,12 @@ export function caption(text) {
   el.textContent = text;
   clearTimeout(captionTimer);
   captionTimer = setTimeout(() => { el.textContent = ''; }, 1800);
+}
+
+/** Re-render a visible toast in the current language. */
+export function relocalizeToast() {
+  const el = $('#toast');
+  if (el && !el.hidden && typeof toastText === 'function') el.textContent = toastText();
 }
 
 export function fmtInt(n) {

@@ -29,7 +29,9 @@
 | `js/rng.js` | FNV-1a `hashString`, mulberry32 `makeRng(seed, stream)` |
 | `js/render.js` | `BoardRenderer`: scene, instanced cells/water, decor, particles, dust motes, shake, camera fit, raycast pick, palettes, `setGraphics`/`graphicsInfo`, post chain, adaptive resolution |
 | `js/gfx.js` | Pure graphics quality model: presets, categories, `detectPreset`, `resolve`, `choosePreset`, `presetTier`, `describe` |
-| `js/gfx-i18n.js` | Graphics-panel strings in 9 locales, `pickLocale`, `gfxStrings` |
+| `js/gfx-i18n.js` | Graphics-panel strings in 9 locales, `pickLocale`, `gfxStrings` (locale = game language) |
+| `sh-language.js` | Shared StarHermit language preference (`window.StarHermitLanguage`), verbatim copy of the canonical `tools/sh-language.js` |
+| `js/strings.js`, `js/i18n.js` | Translation tables (`window.CK_STRINGS`) and the localizer (`window.CKI18N`): static markup in place, `tr()` for code, Language setting |
 | `js/audio.js` | `AudioEngine`: WebAudio buses, authored Opus clips with synthesized fallbacks, generative pad, ambience, captions |
 | `js/storage.js` | Versioned + checksummed localStorage documents: settings, progress, achievements, session snapshot, boards |
 | `js/ui.js` | Screen switching, overlay stack with focus trap/restore, `announce`, `toast`, `caption`, `fmtInt` |
@@ -42,7 +44,9 @@
 | `starhermit.txt` | `name`, `launch=index.html`, `owner`, `server=score-script.js`, `cover=coverart.png` |
 | `tests/run-tests.mjs` | 28 rules/content tests (`npm test`) |
 | `tests/gfx.test.mjs` | 7 `node --test` tests for `gfx.js` and the graphics strings (`npm test`) |
-| `tests/platform.test.mjs` | `node --test` tests for the StarHermit adapter over the SDK (`npm test`) |
+| `tests/platform.test.mjs` | `node --test` tests for the StarHermit adapter over the SDK and the save-conflict merge (`npm test`) |
+| `tests/i18n.test.mjs`, `tests/i18n-common.mjs` | `node --test` localization coverage (`npm test`) |
+| `tests/starhermit-e2e.mjs` | Stubbed StarHermit API for the signed-in e2e step |
 | `tests/e2e.mjs` | Playwright-core playthrough at desktop and mobile viewports (`npm run test:e2e`) |
 | `tests/smoke.mjs`, `tests/capture.mjs` | Older puppeteer smoke run and screenshot capture (dev only) |
 | `knownissues.md` | QA log of confirmed, resolved and suspected defects |
@@ -230,7 +234,13 @@ Colour-vision palettes override water/dirty/foul/well hues (deuteranopia, protan
 
 ## 10. Localization
 
-The Graphics settings section (`js/gfx-i18n.js`) is localized into en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR and it-IT, picked from `navigator.language` (es-* → es-419 except es-ES, fr-* → fr-FR except fr-CA, pt-* → pt-BR). Otherwise the game ships in **English only**: every string is hard-coded in `index.html` and `js/main.js` / `js/content.js`, `<html lang="en">`, and `fmtInt` formats with `en-US`. No language selection exists and no translation table is loaded. Layout allowances already in place for expansion: buttons wrap (`.btn-row.wrap`), the title menu is a column, help cards and settings columns reflow with `auto-fit`, and rails scroll. Shipping en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR and it-IT is listed under "Design intent not yet implemented".
+Nine locales ship: **en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR, it-IT**.
+
+- **Strings.** Markup, code and content are authored in English and the English text is the lookup key. `js/strings.js` holds one row per key with es-419, de-DE, fr-FR, pt-BR and it-IT; en-GB, es-ES and fr-CA list only their differences (colour, Intro/se ha secado, pointage). `tr()` (`js/ui.js` → `js/i18n.js`) falls back regional → parent → English and fills `{name}` placeholders. Static markup in `index.html` (title, mode cards, HUD rails, overlays, settings, help cards, aria-labels) is translated in place; the logo (`data-i18n-skip`) and key caps stay. Code-built text goes through `tr()`: level lists ("Stage {n}", "Mastery {n}", "Daily — {date}", "Practice — {level}"), objectives, tutorial steps, HUD cell descriptions, mirror and fallback-grid labels, toasts, announcements, captions, refusal reasons, results, scores, achievements, the controls card and the boot status. The Graphics section (`js/gfx-i18n.js`) and platform strings (`js/platform-strings.js`) use the same locale. "Channel Keeper" and "StarHermit" are not translated; `fmtInt` keeps `en-US` digit grouping.
+- **Language setting.** Settings → Graphics → **Language → Game language** (rendered by `game-options.js` in the Graphics fieldset; Settings opens from the title and the pause overlay) offers **Automatic — <resolved language>** plus the nine locales by native name, with a status line (Saved to account / Saved on this device / Account sync unavailable). It is the only selector.
+- **Resolution** (`sh-language.js`): explicit game choice → for Automatic, the StarHermit account's `preferredLanguage` (`GET /api/v1/me/language`, signed in only) → `navigator.languages` → en-US, each mapped to the nearest shipped locale (`es-MX → es-419`, `en-AU → en-GB`, `fr → fr-FR`, `pt-PT → pt-BR`). The choice (`auto` or a locale) is stored per player in `localStorage['channel-keeper.language.<user|guest>']` and, when signed in, in the per-player settings key `ui.language` as `{ choice }`; a failed settings read never overwrites it and the game never writes the platform preference. `?lang=<tag>` forces a locale for the page load (QA links) and hides the selector.
+- **Live switching.** A change sets `document.documentElement.lang`, re-applies the static markup and fires `ck-language`; `onLanguage` relabels the Graphics section, the controls card, profile line and title stats, rebuilds an open level list, scores or achievements, re-renders the HUD, tutorial card, mirror and fallback grids and an open results sheet, and a visible toast. The round, its tick and the scene are untouched.
+- `tests/i18n.test.mjs` collects every key from the markup, the code (`tr()`, and `N()` for keys translated later), audio captions and content, and fails when a locale lacks one or a translation drops a placeholder or markup tag. Layout allowances: buttons wrap (`.btn-row.wrap`), the title menu is a column, help cards and settings columns reflow with `auto-fit`, and rails scroll.
 
 ## 11. Accessibility
 
@@ -254,7 +264,9 @@ Manifest `starhermit.txt` declares `name`, `launch=index.html`, `owner`, `server
 | Launch token / renewal | yes | The SDK reads `#game_token=` (library launch) or `#access_token=` (sign-in return), strips it, keeps it in memory, takes the slug from `game_scope` and renews via `POST /api/v1/games/{slug}/launch-token`. If renewal is refused a toast says the player was signed out, the sign-in button returns and play continues locally |
 | Sign in | yes | On `*.starhermit.com` without a token the title shows **Sign in with StarHermit**; hidden when signed in and locally |
 | Profile | yes | The title line shows the account nickname (`StarHermit.profile()`, `Player <id>` fallback, never `/api/v1/me`) with cloud-sync status; standalone keeps the guest line |
-| Cloud save | yes | The `settings`, `progress`, `achievements` and `boards` records mirror to `/api/v1/me/cloud-saves/game:<slug>` (`loadJSON` / `saveJSON` / `flushSave(true)` on `pagehide`/hidden, 2 s debounce); remote wins on boot; localStorage stays the offline cache |
+| Cloud save | yes | The `settings`, `progress`, `achievements` and `boards` records mirror to `/api/v1/me/cloud-saves/game:<slug>` (`loadJSON` / `saveJSON` / `flushSave(true)` on `pagehide`/hidden, 2 s debounce); remote wins on boot; localStorage stays the offline cache. Writes after a load are conditional: when another device saved first the SDK refuses the write (`saveconflict`), the adapter reloads the cloud copy and `mergeRecords` (`js/storage.js`) keeps the better of both sides — journey stages completed on either device with the higher score and best, challenges and dailies with the better result, every played day, the larger counters, every achievement with its earliest unlock and both local boards — while this device keeps its settings and the round in play; the merge is saved again |
+| Language | yes | Automatic follows `GET /api/v1/me/language`; the explicit choice syncs to the settings key `ui.language` (§10) |
+| Reports | yes | Settings → **Report a problem** (signed in only, from `game-options.js`) files a bug report through `StarHermit.reportBug` with a small non-personal `context.json`; uncaught errors are filed as crash reports through `StarHermit.captureCrashes` (at most one per message and three per page load) |
 | Settings KV | yes | Volumes, mute, graphics preset and overrides, reduced motion, palette, contrast, large text, handedness, hold-to-carve, timing assist, haptics and camera view are patched to the game's settings KV on change (debounced, after the KV was read) and applied at boot, where the platform value wins |
 | Controls | yes | Ten keyboard actions are declared as `control.*` in `starhermit.txt`; boot resolves `loadBindings()`, keydown routes by `event.code` through them, and the Help card lists the effective keys |
 | Invite link | yes | Signed in, the title shows **Invite a friend**, copying `StarHermit.inviteLink()` with a confirmation toast |
@@ -263,7 +275,7 @@ Manifest `starhermit.txt` declares `name`, `launch=index.html`, `owner`, `server
 | Platform achievements | no | Achievements stay local in the save doc |
 | Sessions, matchmaking, session invites, chat, replays, realtime, voice | no | Single-player puzzle with no platform sessions |
 
-New platform UI strings (including the leaderboard line) ship in all nine locales (`js/platform-strings.js`, picked from `navigator.language`).
+New platform UI strings (including the leaderboard line) ship in all nine locales (`js/platform-strings.js`, following the game language).
 
 ## 13. Technical architecture
 
@@ -276,9 +288,9 @@ New platform UI strings (including the leaderboard line) ship in all nine locale
 
 ## 14. Testing and acceptance criteria
 
-`npm test` runs `tests/run-tests.mjs` (28 tests), `node --test tests/platform.test.mjs` (the adapter over the SDK with a stubbed fetch and launch fragment: token claims, nickname, cloud save round-trip on `game:<slug>`, settings patch filtered to preferences, bindings, invite link; standalone makes zero fetches) and `node --test tests/gfx.test.mjs` (7 tests: `detectPreset` on sample GPU strings incl. the touch cap, `resolve` with preset/override/invalid tier/scale clamp, preset clears overrides, `describe`, strings present in all 9 locales). `tests/run-tests.mjs`: state creation and serialisation; carve costs and each invalid reason; budget exhaustion; release/tick phase rules; duplicate ids; undo restore and refusal; mid-flow carve refusal; `legalActions`; terminal `settled-dry`, `timeout`, contamination outcome; integer score coherence; comparator order; stable hashes; replay determinism on three levels; replay with undo; 400-command malformed fuzz; every tutorial/journey/challenge validates; daily immutability per UTC day; practice tiers; golden hashes; 150-seed generator fuzz; hint route after carving.
+`npm test` runs `tests/run-tests.mjs` (28 tests), `node --test tests/platform.test.mjs` (the adapter over the SDK with a stubbed fetch and launch fragment: token claims, nickname, cloud save round-trip on `game:<slug>`, settings patch filtered to preferences, bindings, invite link; standalone makes zero fetches; the save-conflict merge keeps the better of both devices), `node --test tests/i18n.test.mjs` (every key translated in every locale with its placeholders; the locale follows `sh-language.js` and switches live) and `node --test tests/gfx.test.mjs` (7 tests: `detectPreset` on sample GPU strings incl. the touch cap, `resolve` with preset/override/invalid tier/scale clamp, preset clears overrides, `describe`, strings present in all 9 locales). `tests/run-tests.mjs`: state creation and serialisation; carve costs and each invalid reason; budget exhaustion; release/tick phase rules; duplicate ids; undo restore and refusal; mid-flow carve refusal; `legalActions`; terminal `settled-dry`, `timeout`, contamination outcome; integer score coherence; comparator order; stable hashes; replay determinism on three levels; replay with undo; 400-command malformed fuzz; every tutorial/journey/challenge validates; daily immutability per UTC day; practice tiers; golden hashes; 150-seed generator fuzz; hint route after carving.
 
-`node tests/e2e.mjs` (desktop + mobile, 14/13 steps): title loads; settings persists quality; Graphics: Low then High apply live (`data-gfx-preset`, summary), a bloom override is saved and leaves the summary, both survive a reload, choosing Low clears overrides; Learn list has 5 lessons; lesson 1 shows the tutorial panel; keyboard carves leave budget 4 and 4 moves; release wins and results total > 0; progress and `first_flow` persisted; watch replay returns to results (desktop); retry; pause/resume; pause freezes `tick`; pointer/tap carves via raycast; leave → results → title; zero non-benign console errors or warnings.
+`node tests/e2e.mjs` (desktop + mobile, 14/13 steps): title loads; settings persists quality; Graphics: Low then High apply live (`data-gfx-preset`, summary), a bloom override is saved and leaves the summary, both survive a reload, choosing Low clears overrides; Learn list has 5 lessons; lesson 1 shows the tutorial panel; keyboard carves leave budget 4 and 4 moves; release wins and results total > 0; progress and `first_flow` persisted; watch replay returns to results (desktop); retry; pause/resume; pause freezes `tick`; pointer/tap carves via raycast; leave → results → title; then, signed in through a launch token against a stubbed StarHermit API (`tests/starhermit-e2e.mjs`) whose account prefers fr-CA: the title reads "Jouer", lesson 1 shows a French objective, pause reads "En pause", Settings shows "Automatique — Français (Canada)", choosing Italiano re-renders Settings, the HUD objective, the lesson card and the action rail, PUTs `ui.language` and shows "Salvato nell’account", Report a problem posts a bug report, no Settings control spills past the viewport, Automatic is restored, and the round's tick and digs are unchanged; zero non-benign console errors or warnings.
 
 QA bar (agents/qa.md) as checkable statements: lesson 1 explains the first mechanic before any input; every button, card and overlay is reachable by mouse, touch and keyboard; no console errors at 1280×800 or 390×844; the tray and results total are visible without horizontal scroll in portrait and landscape; `Hint`, `Undo`, `Fast-forward`, `Reset camera`, `Watch replay`, palettes and every settings control do something observable.
 
@@ -315,7 +327,6 @@ QA bar (agents/qa.md) as checkable statements: lesson 1 explains the first mecha
 
 ## Design intent not yet implemented
 
-- Localization into en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR, it-IT with a string table and language selection.
 - Remote achievement grants via `POST /api/v1/achievement` (unlock proofs stay local), and an in-UI daily board tab that merges local and server-validated rows without opening the Scores screen.
 - Remote achievement delivery through `/api/v1/achievement`.
 - A right-rail drawer toggle on compact layouts.

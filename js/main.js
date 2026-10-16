@@ -11,7 +11,7 @@ import { Session } from './session.js';
 import {
   loadSettings, saveSettings, loadProgress, saveProgress,
   loadAchievements, saveAchievements, unlockAchievement, loadSessionSnapshot,
-  submitScore, loadBoards, saveBoards, onRecordsChange,
+  submitScore, loadBoards, saveBoards, onRecordsChange, mergeRecords,
 } from './storage.js';
 import { AudioEngine } from './audio.js';
 import { CATEGORIES, PRESETS, resolve, presetTier, choosePreset, describe } from './gfx.js';
@@ -19,16 +19,39 @@ import { gfxStrings, pickLocale } from './gfx-i18n.js';
 import { platform } from './platform.js';
 import { platformStrings, fmtPlatform } from './platform-strings.js';
 
-const PT = platformStrings(navigator.language); // StarHermit UI strings
 import { $, $$, showScreen, openOverlay, closeOverlay, anyOverlayOpen, topOverlay,
-  announce, toast, caption, fmtInt } from './ui.js';
+  announce, toast, caption, fmtInt, tr, N, relocalizeToast } from './ui.js';
+
+// One game language (js/i18n.js → sh-language.js): tr() translates English
+// keys; platform (PT) and graphics (gt) strings follow the same locale.
+const curLang = () => (globalThis.CKI18N ? globalThis.CKI18N.lang : navigator.language);
+let PT = platformStrings(curLang()); // StarHermit UI strings
+
+/** Level names are authored as "Stage n", "Mastery n", "Daily — date", "Practice — Easy". */
+function levelName(lv) {
+  const name = (lv && lv.name) || '';
+  let m;
+  if ((m = /^Stage (\d+)$/.exec(name))) return tr('Stage {n}', { n: m[1] });
+  if ((m = /^Mastery (\d+)$/.exec(name))) return tr('Mastery {n}', { n: m[1] });
+  if ((m = /^Daily — (.+)$/.exec(name))) return tr('Daily — {date}', { date: m[1] });
+  if ((m = /^Practice — (.+)$/.exec(name))) return tr('Practice — {level}', { level: tr(m[1]) });
+  return tr(name);
+}
+function levelGoal(lv) {
+  const goal = (lv && lv.goal) || N('Deliver clean water to the well.');
+  const m = /^Deliver (\d+) units of clean water\.$/.exec(goal);
+  return m ? tr('Deliver {n} units of clean water.', { n: m[1] }) : tr(goal);
+}
 
 // ---------------------------------------------------------------- bootstrap
 
 const settings = loadSettings();
 const progress = loadProgress();
 const audio = new AudioEngine(settings);
-audio.onCaption = caption;
+audio.onCaption = (text) => {
+  const m = /^not allowed: (.+)$/.exec(text);
+  caption(m ? tr('not allowed: {reason}', { reason: explainReason(m[1]) }) : tr(text));
+};
 
 let renderer = null;
 let fallbackMode = false;
@@ -59,14 +82,14 @@ function renderProfileLine() {
   if (!line) return;
   renderPlatformButtons();
   if (!platform.hosted) {
-    line.textContent = 'Playing as guest — progress is stored locally.';
+    line.textContent = tr('Playing as guest — progress is stored locally.');
     return;
   }
   const name = platform.profile ? platform.profile.name : '…';
-  const syncTxt = platform.sync === 'synced' ? 'progress synced'
-    : platform.sync === 'saving' ? 'saving…'
-    : 'cloud sync unavailable';
-  line.textContent = `Playing as ${name} · ${syncTxt}`;
+  const syncTxt = platform.sync === 'synced' ? tr('progress synced')
+    : platform.sync === 'saving' ? tr('saving…')
+    : tr('cloud sync unavailable');
+  line.textContent = tr('Playing as {name} · {sync}', { name, sync: syncTxt });
 }
 
 // Sign-in (platform host, no token) and invite (signed in) buttons on the title.
@@ -99,8 +122,8 @@ async function initRenderer() {
     renderer = new BoardRenderer($('#playfield'), settings);
     if (renderer.contextLost) throw new Error('no context');
     renderer.onContextLost = (lost) => {
-      if (lost) toast('Graphics context lost — recovering…');
-      else { toast('Graphics recovered.'); if (game.session) fullSync(); }
+      if (lost) toast(() => tr('Graphics context lost — recovering…'));
+      else { toast(() => tr('Graphics recovered.')); if (game.session) fullSync(); }
     };
     renderer.setGraphics(gfxSaved());
     renderer.setReducedMotion(settings.reducedMotion);
@@ -115,7 +138,7 @@ async function initRenderer() {
 
 // ---------------------------------------------------------------- graphics settings
 
-const gt = gfxStrings(pickLocale(navigator.language));
+let gt = gfxStrings(pickLocale(curLang()));
 
 /** Saved graphics settings in the gfx.js shape (preset + overrides). */
 function gfxSaved() {
@@ -131,6 +154,21 @@ function applyGraphics() {
   // Pixel size and post chain settle on the next frame.
   setTimeout(refreshGfxPanel, 150);
   track('settings_change', { key: 'graphics' });
+}
+
+/** Graphics labels and option names in the current language (also on a language change). */
+function labelGfxPanel() {
+  gt = gfxStrings(pickLocale(curLang()));
+  $('#gfx-legend').textContent = gt('legend');
+  for (const el of $$('[data-gfx-text]')) el.textContent = gt(el.dataset.gfxText);
+  for (const [cat, tiers] of Object.entries(CATEGORIES)) {
+    const sel = $(`#set-gfx-${cat}`);
+    if (!sel) continue;
+    sel.parentElement.querySelector('span').textContent = gt(`cat_${cat}`);
+    for (const o of sel.options) if (o.value !== 'preset') o.textContent = gt(`t_${o.value}`);
+    void tiers;
+  }
+  refreshGfxPanel();
 }
 
 function buildGfxPanel() {
@@ -240,7 +278,7 @@ function startLevel(level, mode, { resume = false } = {}) {
   game.cursor = { x: si % level.w, y: Math.min(level.h - 1, Math.floor(si / level.w) + 1) };
   updateCursor();
 
-  $('#hud-objective').textContent = level.goal || 'Deliver clean water to the well.';
+  $('#hud-objective').textContent = levelGoal(level);
   $('#btn-skip').hidden = true;
   setupTutorialPanel();
   updateHUD();
@@ -251,9 +289,10 @@ function startLevel(level, mode, { resume = false } = {}) {
 
   if (resume && session.state.tick > 0) {
     // "While you were away" summary after restoring a snapshot.
-    toast(`Welcome back — ${session.state.deliveredClean} units delivered, tick ${session.state.tick} when you left.`);
+    const st = session.state;
+    toast(() => tr('Welcome back — {n} units delivered, tick {tick} when you left.', { n: st.deliveredClean, tick: st.tick }));
   }
-  announce(`${level.name}. ${level.goal || ''} Dig budget ${level.carveBudget}.`);
+  announce(tr('{name}. {goal} Dig budget {n}.', { name: levelName(level), goal: levelGoal(level), n: level.carveBudget }));
   track('start', { mode, levelId: level.id });
   audio.event('select');
 }
@@ -283,7 +322,7 @@ function handleEvents(events, state) {
         break;
       case 'release':
         audio.event('release');
-        announce('Water released.');
+        announce(tr('Water released.'));
         $('#btn-skip').hidden = false;
         advanceTutorial('release');
         break;
@@ -292,7 +331,7 @@ function handleEvents(events, state) {
         break;
       case 'contaminate':
         audio.event('contaminate');
-        announce('Water fouled by a contaminant pocket!', true);
+        announce(tr('Water fouled by a contaminant pocket!'), true);
         break;
       case 'undo':
         audio.event('undo');
@@ -301,8 +340,8 @@ function handleEvents(events, state) {
         if (state.sourceLeft <= 0 && !game.springDry) {
           game.springDry = true;
           audio.event('springDry');
-          toast('The spring has run dry.');
-          announce('The spring has run dry. The water still in the channels must reach the well on its own.');
+          toast(() => tr('The spring has run dry.'));
+          announce(tr('The spring has run dry. The water still in the channels must reach the well on its own.'));
         }
         break;
       case 'end':
@@ -325,13 +364,48 @@ function postToLeaderboard(r) {
   line.hidden = true;
   if (!platform.hosted || game.mode === 'practice' || game.mode === 'learn' || r.reason === 'abandoned') return;
   line.hidden = false;
-  line.textContent = PT.lbPosting;
+  lbState = { key: 'lbPosting' };
+  renderLbLine();
   platform.submitScore(r.score.total).then((res) => {
     if (seq !== lbSeq) return;
-    line.textContent = !res.posted ? PT.lbNotPosted
-      : res.rank ? fmtPlatform(PT.lbRank, { rank: res.rank }) : PT.lbPosted;
+    lbState = { key: !res.posted ? 'lbNotPosted' : res.rank ? 'lbRank' : 'lbPosted', rank: res.rank };
+    renderLbLine();
   });
 }
+let lbState = null;
+function renderLbLine() {
+  if (!lbState) return;
+  $('#results-lb').textContent = lbState.key === 'lbRank' ? fmtPlatform(PT.lbRank, { rank: lbState.rank }) : PT[lbState.key];
+}
+
+/**
+ * Language change (Settings → Language or the account preference arriving):
+ * static markup is re-applied by js/i18n.js; every string written from code is
+ * rebuilt here. The round in play, its tick and the scene are untouched.
+ */
+function onLanguage() {
+  PT = platformStrings(curLang());
+  labelGfxPanel();
+  applySettingsToUI();
+  renderProfileLine();
+  refreshTitleStats();
+  if (!$('#screen-levels').hidden && lastLevelsMode) buildLevelsScreen(lastLevelsMode);
+  if (!$('#overlay-scores').hidden) buildScoresScreen();
+  if (!$('#overlay-achv').hidden) buildAchievements();
+  const tray = $('#tray-info');
+  if (tray) tray.textContent = tr('Info');
+  if (game.session) {
+    $('#hud-objective').textContent = levelGoal(game.level);
+    if (game.mode === 'learn' && game.level.tutorial) showTutorialStep(true);
+    updateHUD();
+    updateCursor();
+    updateMirror();
+    updateFallback();
+  }
+  if (lastResults && !$('#overlay-results').hidden) { showResults(lastResults, true); renderLbLine(); }
+  relocalizeToast();
+}
+document.addEventListener('ck-language', onLanguage);
 
 function handleTerminal(results) {
   audio.event(results.won ? 'win' : 'lose');
@@ -380,7 +454,7 @@ function applyResults(r) {
       // absent); the replay envelope is verified server-side.
       if (game.session && typeof game.session.exportReplay === 'function') {
         platform.submitDaily(key, game.session.exportReplay()).then((res) => {
-          if (res.ok) toast(`Daily validated — rank #${res.rank ?? '?'} of ${res.total ?? '?'}.`);
+          if (res.ok) toast(() => tr('Daily validated — rank #{rank} of {total}.', { rank: res.rank ?? '?', total: res.total ?? '?' }));
         }).catch(() => {});
       }
     }
@@ -417,20 +491,20 @@ function boardId() {
   return 'journey';
 }
 
-function showResults(r) {
-  $('#results-h').textContent = r.won ? 'Well filled!' : 'The water is spent';
-  $('#results-reason').textContent = {
-    'target-filled': 'The well drank its fill of clean water.',
-    'settled-dry': 'The water settled before reaching the well.',
-    timeout: 'Time ran out — the flood stalled.',
-    abandoned: 'Round abandoned.',
-  }[r.reason] || r.reason;
+function showResults(r, relocalizing) {
+  $('#results-h').textContent = tr(r.won ? 'Well filled!' : 'The water is spent');
+  $('#results-reason').textContent = tr({
+    'target-filled': N('The well drank its fill of clean water.'),
+    'settled-dry': N('The water settled before reaching the well.'),
+    timeout: N('Time ran out — the flood stalled.'),
+    abandoned: N('Round abandoned.'),
+  }[r.reason] || r.reason);
   $('#sc-clean').textContent = fmtInt(r.score.cleanWater);
   $('#sc-eff').textContent = fmtInt(r.score.efficiency);
   $('#sc-speed').textContent = fmtInt(r.score.speed);
   $('#sc-contam').textContent = fmtInt(r.score.contamination);
   $('#sc-total').textContent = fmtInt(r.score.total);
-  $('#results-seed').textContent = `seed ${r.seed} · ruleset v${CONTENT_VERSION} · session ${r.sessionId}`;
+  $('#results-seed').textContent = tr('seed {seed} · ruleset v{version} · session {session}', { seed: r.seed, version: CONTENT_VERSION, session: r.sessionId });
   const art = $('#results-art');
   if (art) { // illustration is decorative; a failed load simply hides it
     art.hidden = false;
@@ -440,12 +514,12 @@ function showResults(r) {
   const progBits = [];
   if (game.mode === 'journey') {
     const done = Object.keys(progress.journeyCompleted).length;
-    progBits.push(`Journey: ${done} / ${JOURNEY.length} stages complete.`);
+    progBits.push(tr('Journey: {n} / {total} stages complete.', { n: done, total: JOURNEY.length }));
   }
   if (game.mode === 'learn') {
-    progBits.push(`Lessons: ${settings.tutorialsDone.length} / ${TUTORIALS.length}.`);
+    progBits.push(tr('Lessons: {n} / {total}.', { n: settings.tutorialsDone.length, total: TUTORIALS.length }));
   }
-  progBits.push(`${fmtInt(r.deliveredClean)} clean · ${fmtInt(r.deliveredDirty)} fouled · ${r.movesUsed} digs · tick ${r.tick}.`);
+  progBits.push(tr('{clean} clean · {fouled} fouled · {digs} digs · tick {tick}.', { clean: fmtInt(r.deliveredClean), fouled: fmtInt(r.deliveredDirty), digs: r.movesUsed, tick: r.tick }));
   $('#results-progress').textContent = progBits.join(' ');
 
   // Comparison against the local board.
@@ -453,9 +527,9 @@ function showResults(r) {
   if (game.mode !== 'practice' && game.mode !== 'learn' && r.won) {
     const board = (loadBoards()[boardId()] || []);
     const rank = board.findIndex((e) => e.sessionId === r.sessionId);
-    if (rank >= 0) cmp = `Board rank #${rank + 1} of ${board.length}.`;
+    if (rank >= 0) cmp = tr('Board rank #{rank} of {total}.', { rank: rank + 1, total: board.length });
   } else if (game.mode === 'practice') {
-    cmp = 'Practice round — unranked.';
+    cmp = tr('Practice round — unranked.');
   }
   $('#results-compare').textContent = cmp;
 
@@ -466,7 +540,7 @@ function showResults(r) {
   if (earned.length) {
     const chip = document.createElement('span');
     chip.className = 'achv-chip';
-    chip.textContent = `${earned.length} / ${ACHIEVEMENTS.length} achievements`;
+    chip.textContent = tr('{n} / {total} achievements', { n: earned.length, total: ACHIEVEMENTS.length });
     $('#results-achv').appendChild(chip);
   }
 
@@ -483,27 +557,30 @@ function showResults(r) {
     const i = TUTORIALS.findIndex((l) => l.id === r.levelId);
     if (i >= 0 && i + 1 < TUTORIALS.length) {
       nextBtn.hidden = false;
-      nextBtn.textContent = 'Next lesson';
+      nextBtn.textContent = tr('Next lesson');
       nextBtn.onclick = () => { closeOverlay('overlay-results'); startLevel(TUTORIALS[i + 1], 'learn'); };
     }
   }
-  if (!nextBtn.hidden) nextBtn.textContent = game.mode === 'learn' ? 'Next lesson' : 'Next stage';
+  if (!nextBtn.hidden) nextBtn.textContent = tr(game.mode === 'learn' ? 'Next lesson' : 'Next stage');
+  if (relocalizing) return;
 
   openOverlay('overlay-results');
-  announce(r.won ? `Round complete. Score ${r.score.total}.` : 'Round failed.', true);
+  announce(r.won ? tr('Round complete. Score {n}.', { n: r.score.total }) : tr('Round failed.'), true);
 }
 
 // ---------------------------------------------------------------- HUD
 
-const CELL_NAMES = {
-  [CELL.ROCK]: 'solid rock — cannot be dug',
-  [CELL.SOIL]: 'soil — dig for 1',
-  [CELL.HARD]: 'packed clay — dig for 2',
-  [CELL.CHANNEL]: 'open channel',
-  [CELL.CONTAM]: 'foul pocket — contaminates water',
-  [CELL.SOURCE]: 'the spring',
-  [CELL.TARGET]: 'the well',
+const CELL_KEYS = {
+  [CELL.ROCK]: N('solid rock — cannot be dug'),
+  [CELL.SOIL]: N('soil — dig for 1'),
+  [CELL.HARD]: N('packed clay — dig for 2'),
+  [CELL.CHANNEL]: N('open channel'),
+  [CELL.CONTAM]: N('foul pocket — contaminates water'),
+  [CELL.SOURCE]: N('the spring'),
+  [CELL.TARGET]: N('the well'),
 };
+/** Localized cell descriptions, looked up per use so they follow language changes. */
+const CELL_NAMES = new Proxy(CELL_KEYS, { get: (o, k) => (o[k] ? tr(o[k]) : undefined) });
 
 function updateHUD() {
   const s = game.session?.state;
@@ -525,7 +602,7 @@ function announceCell(x, y) {
   const s = game.session?.state;
   if (!s) return;
   const t = s.cells[y * s.w + x];
-  announce(`Dug ${CELL_NAMES[t] === 'open channel' ? 'a channel' : ''} at row ${y + 1}, column ${x + 1}. Budget ${s.budget}.`);
+  announce(tr(CELL_KEYS[t] === 'open channel' ? 'Dug a channel at row {r}, column {c}. Budget {n}.' : 'Dug at row {r}, column {c}. Budget {n}.', { r: y + 1, c: x + 1, n: s.budget }));
 }
 
 function updateCursor() {
@@ -538,7 +615,7 @@ function updateCursor() {
   const t = s.cells[y * s.w + x];
   const water = s.clean[y * s.w + x] + s.dirty[y * s.w + x];
   $('#hud-cursor').textContent = `${x + 1}, ${y + 1}`;
-  $('#hud-cellinfo').textContent = `${CELL_NAMES[t] || 'unknown'}${water ? ` · ${water} water` : ''}`;
+  $('#hud-cellinfo').textContent = `${CELL_NAMES[t] || tr('unknown')}${water ? ' · ' + tr('{n} water', { n: water }) : ''}`;
 }
 
 // ---------------------------------------------------------------- input
@@ -550,8 +627,8 @@ function tryCarve(x, y, { quiet = false } = {}) {
   if (reason) {
     if (!quiet) {
       audio.event('invalid', { reason });
-      toast(explainReason(reason));
-      announce(`Cannot dig: ${explainReason(reason)}`, true);
+      toast(() => explainReason(reason));
+      announce(tr('Cannot dig: {reason}', { reason: explainReason(reason) }), true);
       if (renderer) renderer.setGhost(x, y, false);
       vibrate(40);
     }
@@ -563,16 +640,16 @@ function tryCarve(x, y, { quiet = false } = {}) {
 }
 
 function explainReason(r) {
-  return {
-    'out-of-bounds': 'outside the dig face',
-    'blocked-rock': 'solid rock cannot be dug',
-    'already-open': 'already open',
-    'is-source': 'that is the spring',
-    'is-target': 'that is the well',
-    'no-budget': 'dig budget exhausted',
-    'wrong-phase': 'not while water flows (this ruleset)',
-    'game-over': 'the round is over',
-  }[r] || r;
+  return tr({
+    'out-of-bounds': N('outside the dig face'),
+    'blocked-rock': N('solid rock cannot be dug'),
+    'already-open': N('already open'),
+    'is-source': N('that is the spring'),
+    'is-target': N('that is the well'),
+    'no-budget': N('dig budget exhausted'),
+    'wrong-phase': N('not while water flows (this ruleset)'),
+    'game-over': N('the round is over'),
+  }[r] || r);
 }
 
 function vibrate(ms) {
@@ -584,7 +661,7 @@ function doRelease() {
   const res = game.session.release();
   if (!res.ok && res.reason !== 'duplicate') {
     audio.event('invalid');
-    toast('Already released.');
+    toast(() => tr('Already released.'));
   }
 }
 
@@ -593,10 +670,11 @@ function doUndo() {
   const res = game.session.undo();
   if (!res.ok) {
     audio.event('invalid');
-    toast(res.reason === 'undo-disabled' ? 'Undo is only allowed in Practice and Learn.' : 'Nothing to undo.');
+    const key = res.reason === 'undo-disabled' ? N('Undo is only allowed in Practice and Learn.') : N('Nothing to undo.');
+    toast(() => tr(key));
   } else {
     fullSync();
-    toast('Undone.');
+    toast(() => tr('Undone.'));
   }
 }
 
@@ -605,18 +683,19 @@ function doHint() {
   if (!s || game.watching) return;
   // Hints use the same legality + route APIs as play; never a separate rulebook.
   const route = findRoute(s.state.cells, s.state.w, s.state.h);
-  if (!route) { toast('No clean route exists from here — consider restarting.'); return; }
+  if (!route) { toast(() => tr('No clean route exists from here — consider restarting.')); return; }
   const next = route.find((i) => s.state.cells[i] === CELL.SOIL || s.state.cells[i] === CELL.HARD);
   if (next == null) {
-    toast(s.state.phase === PHASE.EDITING ? 'The route is open — release the water!' : 'The route is set; let it flow.');
+    const key = s.state.phase === PHASE.EDITING ? N('The route is open — release the water!') : N('The route is set; let it flow.');
+    toast(() => tr(key));
     return;
   }
   const x = next % s.state.w, y = Math.floor(next / s.state.w);
   game.cursor = { x, y };
   updateCursor();
   if (renderer) renderer.setGhost(x, y, true);
-  toast(`Try digging row ${y + 1}, column ${x + 1}.`);
-  announce(`Hint: dig row ${y + 1}, column ${x + 1}.`);
+  toast(() => tr('Try digging row {r}, column {c}.', { r: y + 1, c: x + 1 }));
+  announce(tr('Hint: dig row {r}, column {c}.', { r: y + 1, c: x + 1 }));
   audio.event('hint');
 }
 
@@ -766,13 +845,13 @@ function pauseGame() {
   if (!game.session || game.watching) return;
   openOverlay('overlay-pause');
   audio.event('pause');
-  announce('Paused.');
+  announce(tr('Paused.'));
 }
 
 function resumeGame() {
   closeOverlay('overlay-pause');
   audio.event('resume');
-  announce('Resumed.');
+  announce(tr('Resumed.'));
 }
 
 // ---------------------------------------------------------------- tutorials
@@ -787,12 +866,13 @@ function setupTutorialPanel() {
   showTutorialStep();
 }
 
-function showTutorialStep() {
+function showTutorialStep(relocalizing) {
   const steps = game.level.tutorial.steps;
   const step = steps[Math.min(game.tutStep, steps.length - 1)];
-  $('#tut-step-h').textContent = `${game.level.name} — step ${Math.min(game.tutStep + 1, steps.length)} of ${steps.length}`;
-  $('#tut-text').textContent = step.text;
-  announce(step.text);
+  $('#tut-step-h').textContent = tr('{name} — step {n} of {total}', { name: levelName(game.level), n: Math.min(game.tutStep + 1, steps.length), total: steps.length });
+  $('#tut-text').textContent = tr(step.text);
+  if (relocalizing) return;
+  announce(tr(step.text));
   if (step.focus) {
     game.cursor = { x: step.focus[0], y: step.focus[1] };
     updateCursor();
@@ -840,7 +920,7 @@ function updateMirror() {
       if (!el) continue;
       const t = s.cells[y * s.w + x];
       const wtr = s.clean[y * s.w + x] + s.dirty[y * s.w + x];
-      el.textContent = `R${y + 1} C${x + 1}: ${CELL_NAMES[t] || t}${wtr ? `, ${wtr} water` : ''}`;
+      el.textContent = tr('R{r} C{c}', { r: y + 1, c: x + 1 }) + `: ${CELL_NAMES[t] || t}${wtr ? ', ' + tr('{n} water', { n: wtr }) : ''}`;
     }
   }
 }
@@ -885,7 +965,7 @@ function updateFallback() {
       const i = y * s.w + x;
       const wtr = s.clean[i] + s.dirty[i];
       b.textContent = wtr > 0 ? (s.dirty[i] ? '🟠' : '🔵') : FB_GLYPHS[s.cells[i]];
-      b.setAttribute('aria-label', `Row ${y + 1} column ${x + 1}: ${CELL_NAMES[s.cells[i]]}${wtr ? `, ${wtr} water` : ''}`);
+      b.setAttribute('aria-label', tr('Row {r} column {c}', { r: y + 1, c: x + 1 }) + `: ${CELL_NAMES[s.cells[i]]}${wtr ? ', ' + tr('{n} water', { n: wtr }) : ''}`);
     }
   }
 }
@@ -909,7 +989,7 @@ function watchReplay() {
   const watchSession = game.session;
   game.session = fresh;
   if (renderer) { renderer.loadLevel(game.level, game.level.theme); fullSync(); }
-  toast('Watching replay…');
+  toast(() => tr('Watching replay…'));
   let i = 0;
   const stepMs = 260;
   const step = () => {
@@ -935,6 +1015,34 @@ function stopWatch() {
 
 // ---------------------------------------------------------------- screens
 
+/**
+ * Save conflict (another device wrote the cloud slot since our last load):
+ * keep the better of both sides — stages completed on either device with the
+ * higher score, every challenge and daily result, the larger counters, every
+ * achievement with its earliest unlock and both local boards — keep this
+ * device's settings and the round in play, then save the merge again.
+ */
+function mergeCloud(remote) {
+  const m = mergeRecords({ progress, achievements: loadAchievements(), boards: loadBoards() }, remote);
+  Object.assign(progress, m.progress);
+  saveAchievements(m.achievements);
+  saveBoards(m.boards);
+  saveProgress(progress); // persist point: the records listener mirrors the merge to the cloud
+  refreshTitleStats();
+}
+
+/** Display name of a local board id. */
+function boardName(id) {
+  if (id === 'journey') return tr('Journey');
+  let m;
+  if ((m = /^daily-(.+)$/.exec(id))) return tr('Daily — {date}', { date: m[1] });
+  if ((m = /^challenge-(.+)$/.exec(id))) {
+    const ch = CHALLENGES.find((c) => c.id === m[1]);
+    return ch ? levelName(ch) : id;
+  }
+  return id;
+}
+
 function refreshTitleStats() {
   const done = Object.keys(progress.journeyCompleted).length;
   $('#journey-prog').textContent = `(${done}/${JOURNEY.length})`;
@@ -942,7 +1050,9 @@ function refreshTitleStats() {
   $('#btn-resume').hidden = !loadSessionSnapshot();
 }
 
+let lastLevelsMode = null;
 function buildLevelsScreen(mode) {
+  lastLevelsMode = mode;
   const list = $('#level-list');
   const setup = $('#practice-setup');
   list.innerHTML = '';
@@ -950,14 +1060,14 @@ function buildLevelsScreen(mode) {
   const desc = $('#levels-desc');
 
   if (mode === 'learn') {
-    $('#levels-h').textContent = 'Learn';
-    desc.textContent = 'Interactive lessons. Each introduces one rule and asks you to perform it.';
+    $('#levels-h').textContent = tr('Learn');
+    desc.textContent = tr('Interactive lessons. Each introduces one rule and asks you to perform it.');
     TUTORIALS.forEach((lv) => {
       list.appendChild(levelButton(lv, mode, settings.tutorialsDone.includes(lv.id)));
     });
   } else if (mode === 'journey') {
-    $('#levels-h').textContent = 'Journey';
-    desc.textContent = 'Forty stages of rising depth. Every fourth stage is a mastery check.';
+    $('#levels-h').textContent = tr('Journey');
+    desc.textContent = tr('Forty stages of rising depth. Every fourth stage is a mastery check.');
     const firstIncomplete = JOURNEY.findIndex((l) => !progress.journeyCompleted[l.id]);
     JOURNEY.forEach((lv, i) => {
       const done = !!progress.journeyCompleted[lv.id];
@@ -965,8 +1075,8 @@ function buildLevelsScreen(mode) {
       list.appendChild(levelButton(lv, mode, done, locked));
     });
   } else if (mode === 'challenge') {
-    $('#levels-h').textContent = 'Challenge';
-    desc.textContent = 'Constrained goals: tight budgets, speed targets, altered rules.';
+    $('#levels-h').textContent = tr('Challenge');
+    desc.textContent = tr('Constrained goals: tight budgets, speed targets, altered rules.');
     CHALLENGES.forEach((lv) => {
       list.appendChild(levelButton(lv, mode, !!progress.challengesCompleted[lv.id]));
     });
@@ -978,9 +1088,10 @@ function levelButton(lv, mode, done, locked = false) {
   b.className = `level-item${done ? ' done' : ''}${locked ? ' locked' : ''}${lv.name.startsWith('Mastery') ? ' mastery' : ''}`;
   b.setAttribute('role', 'listitem');
   const best = progress.journeyBest[lv.id];
-  b.innerHTML = `<strong>${lv.name}</strong><span class="dim small">${lv.w}×${lv.h} · need ${lv.targetNeed}</span>` +
-    (done ? `<span class="stars">✓${best ? ` · best ${fmtInt(best)}` : ''}</span>` : '') +
-    (locked ? '<span class="dim small">locked</span>' : '');
+  const part = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; e.textContent = text; return e; };
+  b.append(part('strong', '', levelName(lv)), part('span', 'dim small', `${lv.w}×${lv.h} · ` + tr('need {n}', { n: lv.targetNeed })));
+  if (done) b.append(part('span', 'stars', '✓' + (best ? ' · ' + tr('best {n}', { n: fmtInt(best) }) : '')));
+  if (locked) b.append(part('span', 'dim small', tr('locked')));
   if (!locked) {
     b.addEventListener('click', () => { audio.ensure(); audio.event('ui'); startLevel(lv, mode); });
   } else {
@@ -995,22 +1106,27 @@ function buildScoresScreen() {
   root.innerHTML = '';
   const ids = Object.keys(boards).sort();
   if (!ids.length && !platform.ownServer) {
-    root.innerHTML = '<p class="dim">No scores yet. Win a daily, journey, or challenge round to post one.</p>';
+    root.innerHTML = '';
+    const p = document.createElement('p');
+    p.className = 'dim';
+    p.textContent = tr('No scores yet. Win a daily, journey, or challenge round to post one.');
+    root.appendChild(p);
     return;
   }
   for (const id of ids) {
     const h = document.createElement('h3');
-    h.textContent = id;
+    h.textContent = boardName(id);
     root.appendChild(h);
     const table = document.createElement('table');
     table.className = 'board-list';
-    table.innerHTML = '<thead><tr><th>#</th><th>Score</th><th>Ticks</th><th>Assists</th><th>Seed</th></tr></thead>';
+    table.innerHTML = '<thead><tr><th>#</th><th></th><th></th><th></th><th></th></tr></thead>';
+    [N('Score'), N('Ticks'), N('Assists'), N('Seed')].forEach((k, i) => { table.tHead.rows[0].cells[i + 1].textContent = tr(k); });
     const tb = document.createElement('tbody');
     boards[id].slice(0, 10).forEach((e, i) => {
       const tr = document.createElement('tr');
       if (e.name === 'You') tr.className = 'you';
       tr.innerHTML = `<td>${i + 1}</td><td class="num">${fmtInt(e.score)}</td>` +
-        `<td class="num">${e.durationTicks}</td><td>${e.assists}</td><td class="dim">${e.seed}</td>`;
+        `<td class="num">${e.durationTicks}</td><td>${e.assists === 'none' ? tr('none') : e.assists}</td><td class="dim">${e.seed}</td>`;
       tb.appendChild(tr);
     });
     table.appendChild(tb);
@@ -1020,11 +1136,13 @@ function buildScoresScreen() {
       platform.fetchDailyBoard(id).then(async (entries) => {
         if (!entries || !entries.length) return;
         const h2 = document.createElement('h3');
-        h2.textContent = id + ' — validated';
+        h2.textContent = tr('{board} — validated', { board: boardName(id) });
         root.appendChild(h2);
         const t2 = document.createElement('table');
         t2.className = 'board-list';
-        t2.innerHTML = '<thead><tr><th>#</th><th>Player</th><th>Score</th></tr></thead>';
+        t2.innerHTML = '<thead><tr><th>#</th><th></th><th></th></tr></thead>';
+        t2.tHead.rows[0].cells[1].textContent = tr('Player');
+        t2.tHead.rows[0].cells[2].textContent = tr('Score');
         const tb2 = document.createElement('tbody');
         for (let i = 0; i < entries.slice(0, 10).length; i++) {
           const e = entries[i];
@@ -1049,8 +1167,10 @@ function buildAchievements() {
   for (const a of ACHIEVEMENTS) {
     const li = document.createElement('li');
     li.className = got[a.key] ? '' : 'locked';
-    li.innerHTML = `<span><strong>${a.name}</strong><br><span class="dim small">${a.desc}</span></span>` +
+    li.innerHTML = `<span><strong></strong><br><span class="dim small"></span></span>` +
       `<span>${got[a.key] ? '✓' : '—'}</span>`;
+    li.querySelector('strong').textContent = tr(a.name);
+    li.querySelector('.dim').textContent = tr(a.desc);
     ul.appendChild(li);
   }
 }
@@ -1062,10 +1182,10 @@ function applySettingsToUI() {
   document.body.classList.toggle('left-handed', settings.leftHanded);
   // Help card reflects current control mappings.
   const k = (a) => platform.keyLabel(a);
-  $('#help-keys').textContent =
-    `Move cursor: ${k('up')}, ${k('left')}, ${k('down')}, ${k('right')} · Dig: ${k('carve')} · Release: ${k('release')} · ` +
-    `Undo: ${k('undo')} · Hint: ${k('hint')} · Reset camera: ${k('cameraReset')} · Pause: ${k('pause')} · ` +
-    'Gamepad: stick/d-pad move, A dig, X release, Y hint, Start pause.';
+  $('#help-keys').textContent = tr('Move cursor: {up}, {left}, {down}, {right} · Dig: {carve} · Release: {release} · Undo: {undo} · Hint: {hint} · Reset camera: {camera} · Pause: {pause} · Gamepad: stick/d-pad move, A dig, X release, Y hint, Start pause.', {
+    up: k('up'), left: k('left'), down: k('down'), right: k('right'), carve: k('carve'), release: k('release'),
+    undo: k('undo'), hint: k('hint'), camera: k('cameraReset'), pause: k('pause'),
+  });
 }
 
 /** Reflect `settings` into the settings form (after cloud/KV values land). */
@@ -1129,10 +1249,10 @@ function bindSettings() {
   $('#btn-replay-tuts').addEventListener('click', () => {
     settings.tutorialsDone = [];
     saveSettings(settings);
-    toast('Tutorials reset — find them under Learn.');
+    toast(() => tr('Tutorials reset — find them under Learn.'));
   });
   $('#btn-wipe').addEventListener('click', () => {
-    if (!confirm('Erase all local progress, scores, and achievements?')) return;
+    if (!confirm(tr('Erase all local progress, scores, and achievements?'))) return;
     localStorage.clear();
     location.reload();
   });
@@ -1146,7 +1266,7 @@ function applyCompactRails() {
     const b = document.createElement('button');
     b.id = 'tray-info';
     b.className = 'btn';
-    b.textContent = 'Info';
+    b.textContent = tr('Info');
     b.addEventListener('click', () => {
       $('#rail-left').classList.toggle('open');
       $('#rail-right').classList.remove('open');
@@ -1197,7 +1317,7 @@ function bindUI() {
       (snap?.levelId?.startsWith('daily') ? dailyLevel(now()) : null) ||
       (snap ? practiceLevel('medium', snap.seed) : null);
     if (lv) startLevel(lv, snap.mode || 'practice', { resume: true });
-    else toast('Nothing to resume.');
+    else toast(() => tr('Nothing to resume.'));
   });
   $('#btn-scores').addEventListener('click', () => { buildScoresScreen(); openOverlay('overlay-scores'); });
   $('#btn-achievements').addEventListener('click', () => { buildAchievements(); openOverlay('overlay-achv'); });
@@ -1326,7 +1446,7 @@ async function boot() {
   const status = $('#boot-status');
   const step = (pct, msg) => { bar.style.width = `${pct}%`; status.textContent = msg; };
 
-  step(15, 'Loading rules…');
+  step(15, tr('Loading rules…'));
   applySettingsToUI();
   bindUI();
   bindSettings();
@@ -1343,14 +1463,16 @@ async function boot() {
   $('#btn-signin').addEventListener('click', () => platform.signIn());
   $('#btn-invite').addEventListener('click', async () => {
     const ok = await platform.copyInvite();
-    toast(ok ? PT.inviteCopied : PT.inviteFailed);
+    toast(() => (ok ? PT.inviteCopied : PT.inviteFailed));
   });
   platform.onAuth((a) => {
-    if (!a.signedIn) toast(PT.signedOut, 4000);
+    if (!a.signedIn) toast(() => PT.signedOut, 4000);
     renderProfileLine();
   });
+  // Another device saved first: merge both sides and save again.
+  platform.onConflict((remote) => mergeCloud(remote));
 
-  step(35, 'Synchronising clock…');
+  step(35, tr('Synchronising clock…'));
   platform.onSync(renderProfileLine);
   try { platform.init(); } catch { /* offline */ }
   try {
@@ -1380,14 +1502,14 @@ async function boot() {
   applySettingsToUI();
   renderProfileLine();
 
-  step(60, 'Building scene…');
+  step(60, tr('Building scene…'));
   await initRenderer();
   refreshGfxPanel();
 
-  step(85, 'Preparing content…');
+  step(85, tr('Preparing content…'));
   refreshTitleStats();
 
-  step(100, 'Ready.');
+  step(100, tr('Ready.'));
   lastFrame = performance.now();
   requestAnimationFrame(loop);
   showScreen('title');
@@ -1395,7 +1517,7 @@ async function boot() {
 
 boot().catch((err) => {
   console.error(err);
-  $('#boot-status').textContent = 'Failed to start: ' + err.message;
+  $('#boot-status').textContent = tr('Failed to start: {reason}', { reason: err.message });
   track('error', { category: 'boot' });
 });
 

@@ -171,6 +171,40 @@ export function saveBoards(boards) {
   return write('boards', boards);
 }
 
+/**
+ * Cloud-save conflict merge: the better of two records so neither device's
+ * progress is lost. Returns new { progress, achievements, boards }.
+ */
+export function mergeRecords(local, remote) {
+  const a = Object.assign({}, DEFAULT_PROGRESS, local.progress || {});
+  const b = Object.assign({}, DEFAULT_PROGRESS, (remote && remote.progress) || {});
+  const better = (x, y) => (!x ? y : !y ? x : ((y.score || 0) > (x.score || 0) ? Object.assign({}, x, y) : x));
+  const mergeMap = (k, pick) => {
+    const out = Object.assign({}, b[k]);
+    for (const [id, v] of Object.entries(a[k] || {})) out[id] = pick(v, out[id]);
+    return out;
+  };
+  const progress = Object.assign({}, a, {
+    journeyCompleted: mergeMap('journeyCompleted', (x, y) => { const r = better(x, y); return Object.assign({}, r, { won: !!((x && x.won) || (y && y.won)) }); }),
+    journeyBest: mergeMap('journeyBest', (x, y) => Math.max(x || 0, y || 0)),
+    challengesCompleted: mergeMap('challengesCompleted', better),
+    daily: mergeMap('daily', (x, y) => { const r = better(x, y); return Object.assign({}, r, { won: !!((x && x.won) || (y && y.won)) }); }),
+    dailyDays: [...new Set([...(a.dailyDays || []), ...(b.dailyDays || [])])].sort(),
+  });
+  for (const k of ['practicePlayed', 'totalCleanWater', 'cleanWins', 'sessionsPlayed']) progress[k] = Math.max(a[k] || 0, b[k] || 0);
+  const achievements = Object.assign({}, (remote && remote.achievements) || {});
+  for (const [k, at] of Object.entries(local.achievements || {})) achievements[k] = achievements[k] ? Math.min(achievements[k], at) : at;
+  const boards = {};
+  for (const src of [local.boards || {}, (remote && remote.boards) || {}]) {
+    for (const [id, list] of Object.entries(src)) {
+      const into = boards[id] || (boards[id] = []);
+      for (const e of list || []) if (!into.some((x) => x.sessionId && x.sessionId === e.sessionId)) into.push(e);
+    }
+  }
+  for (const id of Object.keys(boards)) boards[id] = boards[id].sort((x, y) => y.score - x.score || x.durationTicks - y.durationTicks).slice(0, 50);
+  return { progress, achievements, boards };
+}
+
 export function submitScore(boardId, entry, maxEntries = 50) {
   const boards = loadBoards();
   const list = boards[boardId] || [];

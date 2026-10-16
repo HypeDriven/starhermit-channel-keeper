@@ -29,6 +29,7 @@ export const platform = {
   _timeOffset: 0,
   _syncListeners: [],
   _authListeners: [],
+  _conflictListeners: [],
   _hooked: false,
   _settingsLoaded: false,
   _lastSettings: null,
@@ -49,7 +50,17 @@ export const platform = {
     const s = sdk();
     if (s && !this._hooked) {
       this._hooked = true;
-      s.on('saved', (ok) => this._setSync(ok ? 'synced' : 'offline'));
+      s.on('saved', (ok) => { if (!s.saveConflicted()) this._setSync(ok ? 'synced' : 'offline'); });
+      // A write that lost to a newer save on another device: the SDK emits
+      // 'saveconflict' and blocks writes until a reload. Reload the cloud copy
+      // and hand it to the game (onConflict) to merge and save again.
+      s.on('saveconflict', () => {
+        this._setSync('saving');
+        s.loadJSON().then((remote) => {
+          if (s.saveConflicted()) { this._setSync('offline'); return; }
+          for (const fn of this._conflictListeners) { try { fn(remote); } catch { /* ignore */ } }
+        });
+      });
       s.on('auth', (a) => {
         if (!a.signedIn) { this.profile = null; this.ownServer = false; this._setSync('offline'); }
         for (const fn of this._authListeners) { try { fn(a); } catch { /* ignore */ } }
@@ -65,6 +76,8 @@ export const platform = {
     return { hosted: this.hosted };
   },
   onAuth(fn) { if (typeof fn === 'function') this._authListeners.push(fn); },
+  /** fn(remoteDoc|null) after a save conflict: the newer cloud copy, reloaded (writes allowed again). */
+  onConflict(fn) { if (typeof fn === 'function') this._conflictListeners.push(fn); },
   canSignIn() { const s = sdk(); return !!(s && s.canSignIn()); },
   signIn() { const s = sdk(); return !!(s && s.signIn()); },
   inviteLink() { const s = sdk(); return s && s.signedIn ? s.inviteLink() : null; },
@@ -77,11 +90,13 @@ export const platform = {
 
   /* Identity: the profile nickname (never /api/v1/me, never usernames). */
   profileFor(userId) {
-    if (!userId || typeof userId !== 'string') return Promise.resolve('player');
+    const tr = (k, v) => (globalThis.CKI18N ? globalThis.CKI18N.T(k, v) : k.replace('{id}', v ? v.id : ''));
+    if (!userId || typeof userId !== 'string') return Promise.resolve(tr('player'));
     const s = sdk();
-    if (!s || !s.signedIn) return Promise.resolve('Player ' + userId.slice(0, 6));
-    return s.profile(userId).then((p) => (p && p.displayName) || 'Player ' + userId.slice(0, 6))
-      .catch(() => 'Player ' + userId.slice(0, 6));
+    const fallback = tr('Player {id}', { id: userId.slice(0, 6) });
+    if (!s || !s.signedIn) return Promise.resolve(fallback);
+    return s.profile(userId).then((p) => (p && p.displayName) || fallback)
+      .catch(() => fallback);
   },
   async fetchProfile() {
     if (!this.userId) return null;

@@ -53,7 +53,7 @@ export function hostedEnv(slug, extra) {
     const path = String(url);
     if (path === `/api/v1/users/${UID}/profile`) return resp(200, { nickname: 'Ada' });
     if (path === `/api/v1/me/cloud-saves/${encodeURIComponent('game:' + slug)}`) {
-      if (method === 'PUT') { saved = Buffer.from(JSON.parse(init.body).dataBase64, 'base64'); return resp(204, null); }
+      if (method === 'PUT') { saved = Buffer.from(JSON.parse(init.body).dataBase64, 'base64'); return resp(200, { etag: '"v' + Date.now() + '"' }); }
       return saved ? resp(200, null, new Uint8Array(saved)) : resp(404, null);
     }
     if (path === `/api/v1/games/${slug}/settings`) {
