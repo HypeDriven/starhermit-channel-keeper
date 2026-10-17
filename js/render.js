@@ -164,6 +164,16 @@ const _q = new THREE.Quaternion();
 const _s = new THREE.Vector3();
 const _c = new THREE.Color();
 
+
+// Run a post pass at a fraction of the frame (per-preset budget). EffectComposer sizes every pass to the
+// full frame in addPass/setSize, so the pass's own setSize is wrapped to apply the scale.
+function atScale(pass, k) {
+  if (!(k > 0 && k < 1)) return pass;
+  const setSize = pass.setSize.bind(pass);
+  pass.setSize = (w, h) => setSize(Math.max(1, Math.round(w * k)), Math.max(1, Math.round(h * k)));
+  return pass;
+}
+
 export class BoardRenderer {
   constructor(container, settings) {
     this.container = container;
@@ -418,7 +428,7 @@ export class BoardRenderer {
       composer.addPass(new RenderPass(this.scene, this.camera));
       if (g.ao !== 'off') {
         const aoRes = g.budget.aoRes; // per-preset post resolution
-        const ao = new GTAOPass(this.scene, this.camera, Math.round(w * pr * aoRes), Math.round(h * pr * aoRes));
+        const ao = atScale(new GTAOPass(this.scene, this.camera, w * pr, h * pr), aoRes);
         ao.output = GTAOPass.OUTPUT.Default;
         ao.blendIntensity = g.ao === 'high' ? 0.85 : 0.7;
         ao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.4, thickness: 1.2, scale: 1.0, samples: g.ao === 'high' ? 16 : 8 });
@@ -427,7 +437,7 @@ export class BoardRenderer {
       }
       if (g.bloom === 'on') {
         // High threshold: only water, the well ring and the spring glow bloom.
-        composer.addPass(new UnrealBloomPass(new THREE.Vector2(Math.round(w * g.budget.bloomRes), Math.round(h * g.budget.bloomRes)), 0.6, 0.5, 0.86));
+        composer.addPass(atScale(new UnrealBloomPass(new THREE.Vector2(w, h), 0.6, 0.5, 0.86), g.budget.bloomRes));
       }
       composer.addPass(new OutputPass());
       if (g.grade === 'on') composer.addPass(new ShaderPass(GradeShader));
