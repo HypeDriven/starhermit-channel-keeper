@@ -130,6 +130,7 @@ async function runPass(label, contextOpts) {
       g = await gfx();
       if (g.body !== 'high' || g.canvas !== 'high') throw new Error(`high not applied: ${JSON.stringify(g)}`);
       if (!/bloom/.test(g.summary)) throw new Error(`high summary lacks bloom: ${g.summary}`);
+      if (!/ · Level 0 · /.test(g.summary)) throw new Error(`summary lacks the hardware level: ${g.summary}`);
       await page.locator('#set-gfx-bloom').scrollIntoViewIfNeeded();
       await page.selectOption('#set-gfx-bloom', 'off');
       g = await gfx();

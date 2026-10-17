@@ -15,7 +15,7 @@ import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { CELL, CELL_CAP } from './rules.js';
-import { detectPreset, describe, resolve, SHADOW_MAP, PARTICLE_CAP } from './gfx.js';
+import { detectLevel, presetForLevel, describe, resolve, SHADOW_MAP, PARTICLE_CAP } from './gfx.js';
 import { getTheme } from './content.js';
 import { makeRng } from './rng.js';
 
@@ -222,8 +222,10 @@ export class BoardRenderer {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.setPixelRatio(1);
     this.gpu = BoardRenderer._gpuName(this.renderer);
+    // StarHermit hardware level → Auto preset (SwiftShader = level 0 → Low; phones cap at Balanced).
     const touch = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || navigator.maxTouchPoints > 0;
-    this.detected = detectPreset(this.gpu, touch);
+    this.hwLevel = detectLevel(this.gpu, globalThis.StarHermitGpu ? globalThis.StarHermitGpu.detectSystem() : { mobile: touch });
+    this.detected = presetForLevel(this.hwLevel);
     this.renderer.domElement.id = 'game-canvas';
     this.renderer.domElement.setAttribute('aria-hidden', 'true'); // DOM mirror carries semantics
     this.container.prepend(this.renderer.domElement);
@@ -315,7 +317,7 @@ export class BoardRenderer {
     if (json === this._gfxJson) return;
     this._gfxJson = json;
     const prev = this.q;
-    const g = resolve(saved, this.detected);
+    const g = resolve(saved, this.detected, this.hwLevel);
     this.q = g;
     const size = SHADOW_MAP[g.shadows];
     const shadowsChanged = this.renderer.shadowMap.enabled !== size > 0;
@@ -332,7 +334,7 @@ export class BoardRenderer {
         if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { m.needsUpdate = true; });
       });
     }
-    const cap = PARTICLE_CAP[g.particles];
+    const cap = Math.min(PARTICLE_CAP[g.particles], g.budget.particles);
     if (cap !== this.particleCap) this._setParticleCap(cap);
     U.uDetail.value = g.detail === 'detailed' ? 1 : 0;
     this._applyEnv();
@@ -343,8 +345,21 @@ export class BoardRenderer {
     this.postFailed = false;
     this._fpsVisible(g.showFps);
     this.renderer.domElement.dataset.gfxPreset = g.preset;
-    // Geometry detail (bevels, textures, boulders) is baked at level build.
-    if (this.level && prev && prev.detail !== g.detail) this.loadLevel(this.level, this.level.theme);
+    // Geometry detail and preset asset variants (bevels, textures, materials, boulders) are baked at level build.
+    const assets = (q) => [q.detail, q.budget.material, q.budget.bevel, q.budget.grain, q.budget.rocks].join('|');
+    if (this.level && prev && assets(prev) !== assets(g)) this.loadLevel(this.level, this.level.theme);
+  }
+
+  /** Lit material for the preset budget: Lambert on Low, Standard on Balanced, Physical (clearcoat) above. */
+  _lit(params) {
+    const kind = this.q.budget.material;
+    const { clearcoat, clearcoatRoughness, ...std } = params;
+    if (kind === 'lambert') {
+      const { roughness, metalness, envMapIntensity, ...lp } = std;
+      return new THREE.MeshLambertMaterial(lp);
+    }
+    if (kind === 'physical' && clearcoat) return new THREE.MeshPhysicalMaterial(params);
+    return new THREE.MeshStandardMaterial(std);
   }
 
   /** What the settings panel shows: GPU, auto choice, resolved tiers, cost and frame rate. */
@@ -352,6 +367,7 @@ export class BoardRenderer {
     const px = [Math.round(this.size[0] * this.pixelRatio), Math.round(this.size[1] * this.pixelRatio)];
     return {
       gpu: this.gpu || 'unknown GPU',
+      level: this.hwLevel,
       detected: this.detected,
       resolved: this.q,
       pixels: px,
@@ -401,7 +417,8 @@ export class BoardRenderer {
       composer.setSize(w, h);
       composer.addPass(new RenderPass(this.scene, this.camera));
       if (g.ao !== 'off') {
-        const ao = new GTAOPass(this.scene, this.camera, w * pr, h * pr);
+        const aoRes = g.budget.aoRes; // per-preset post resolution
+        const ao = new GTAOPass(this.scene, this.camera, Math.round(w * pr * aoRes), Math.round(h * pr * aoRes));
         ao.output = GTAOPass.OUTPUT.Default;
         ao.blendIntensity = g.ao === 'high' ? 0.85 : 0.7;
         ao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.4, thickness: 1.2, scale: 1.0, samples: g.ao === 'high' ? 16 : 8 });
@@ -410,7 +427,7 @@ export class BoardRenderer {
       }
       if (g.bloom === 'on') {
         // High threshold: only water, the well ring and the spring glow bloom.
-        composer.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.6, 0.5, 0.86));
+        composer.addPass(new UnrealBloomPass(new THREE.Vector2(Math.round(w * g.budget.bloomRes), Math.round(h * g.budget.bloomRes)), 0.6, 0.5, 0.86));
       }
       composer.addPass(new OutputPass());
       if (g.grade === 'on') composer.addPass(new ShaderPass(GradeShader));
@@ -470,14 +487,15 @@ export class BoardRenderer {
 
     // -- solid cells: one instanced mesh, per-instance color --
     const detailed = this.q.detail === 'detailed';
+    const B = this.q.budget;
     const cellGeo = detailed
-      ? new RoundedBoxGeometry(0.94, 0.94, 0.55, 2, 0.07)
+      ? new RoundedBoxGeometry(0.94, 0.94, 0.55, B.bevel, 0.07) // bevel LOD per preset
       : new THREE.BoxGeometry(0.94, 0.94, 0.55);
     this._aKind = new THREE.InstancedBufferAttribute(new Float32Array(n), 1);
     cellGeo.setAttribute('aKind', this._aKind);
-    const cellMat = new THREE.MeshStandardMaterial({ roughness: 0.9, metalness: 0.02 });
+    const cellMat = this._lit({ roughness: 0.9, metalness: 0.02 });
     if (detailed) {
-      this._grain = this._grain || makeGrainTexture(128, 7, 26);
+      if (!this._grain || this._grain.image.width !== B.grain) { this._grain?.dispose(); this._grain = makeGrainTexture(B.grain, 7, 26); }
       cellMat.map = this._grain;
       cellMat.bumpMap = this._grain;
       cellMat.bumpScale = 1.2;
@@ -495,7 +513,7 @@ export class BoardRenderer {
 
     // -- water overlay: instanced emissive boxes --
     const waterGeo = new THREE.BoxGeometry(0.8, 0.8, 0.34);
-    const waterMat = new THREE.MeshPhysicalMaterial({
+    const waterMat = this._lit({
       color: 0x808080, // instance colour carries the hue; keep diffuse low so it stays saturated
       roughness: 0.12, metalness: 0.0, transparent: true, opacity: 0.93,
       clearcoat: 1, clearcoatRoughness: 0.08, envMapIntensity: 1.0,
@@ -517,7 +535,7 @@ export class BoardRenderer {
     const contamCount = level.cells.filter((c) => c === CELL.CONTAM).length;
     if (contamCount > 0) {
       const spikeGeo = new THREE.ConeGeometry(0.16, 0.5, 5);
-      const spikeMat = new THREE.MeshStandardMaterial({
+      const spikeMat = this._lit({
         color: this._color('contam'), roughness: 0.3, metalness: 0.2,
         emissive: this._color('contam'), emissiveIntensity: 0.35,
       });
@@ -646,7 +664,9 @@ export class BoardRenderer {
     const { w, h } = this.level;
     const detailed = this.q.detail === 'detailed';
     const detail = detailed ? 1 : 0.3;
-    const wallTex = detailed ? (this._wallTex = this._wallTex || makeGrainTexture(256, 11, 40, 0.45)) : null;
+    const wallPx = this.q.budget.grain * 2; // per-preset texture variant
+    if (detailed && (!this._wallTex || this._wallTex.image.width !== wallPx)) { this._wallTex?.dispose(); this._wallTex = makeGrainTexture(wallPx, 11, 40, 0.45); }
+    const wallTex = detailed ? this._wallTex : null;
     const texFor = (rx, ry) => {
       if (!wallTex) return null;
       const t = wallTex.clone();
@@ -658,7 +678,7 @@ export class BoardRenderer {
     const backMap = texFor((w + 30) / 4, (h + 30) / 4);
     const back = new THREE.Mesh(
       new THREE.BoxGeometry(w + 30, h + 30, 1.5),
-      new THREE.MeshStandardMaterial({
+      this._lit({
         color: new THREE.Color(this.theme.rock).multiplyScalar(detailed ? 0.6 : 1),
         roughness: 1, map: backMap, bumpMap: backMap, bumpScale: 2,
       }));
@@ -669,13 +689,13 @@ export class BoardRenderer {
     const floorMap = texFor((w + 30) / 5, 6);
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(w + 30, 30),
-      new THREE.MeshStandardMaterial({ color: this.theme.rock, roughness: 0.95, map: floorMap, bumpMap: floorMap, bumpScale: 2 }));
+      this._lit({ color: this.theme.rock, roughness: 0.95, map: floorMap, bumpMap: floorMap, bumpScale: 2 }));
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(0, -h / 2 - 0.5, 6);
     floor.receiveShadow = true;
     this.envGroup.add(floor);
     // Scattered rocks / stalactites by detail tier.
-    const rocks = Math.floor(14 * detail) + 4;
+    const rocks = Math.round(this.q.budget.rocks * (detailed ? 1 : 0.5)) + 4;
     const rockGeo = new THREE.DodecahedronGeometry(0.5, detailed ? 1 : 0);
     if (detailed) {
       // Lumpy boulders: displace the subdivided dodecahedron deterministically.
@@ -688,7 +708,7 @@ export class BoardRenderer {
       }
       rockGeo.computeVertexNormals();
     }
-    const rockMat = new THREE.MeshStandardMaterial({ color: this.theme.rock, roughness: 0.85, flatShading: true });
+    const rockMat = this._lit({ color: this.theme.rock, roughness: 0.85, flatShading: true });
     const inst = new THREE.InstancedMesh(rockGeo, rockMat, rocks);
     for (let i = 0; i < rocks; i++) {
       const side = rng.chance(0.5) ? -1 : 1;

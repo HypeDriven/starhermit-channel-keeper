@@ -245,7 +245,7 @@ function refreshGfxPanel() {
     aoHigh: gt('w_aoHigh'), bloom: gt('w_bloom'), noAA: gt('w_noAA'),
   };
   $('#gfx-summary').textContent = info
-    ? `${info.gpu} · ${describe(r, info.pixels, words)}`
+    ? `${info.gpu} · ${gt('level', { n: info.level })} · ${describe(r, info.pixels, words)}`
     : gt('noWebgl');
   const note = $('#gfx-post-note');
   note.hidden = !(info && info.postFailed);
