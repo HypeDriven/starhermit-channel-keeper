@@ -213,11 +213,10 @@ Colour-vision palettes override water/dirty/foul/well hues (deuteranopia, protan
 
 Phones and tablets pace Auto FPS at half the display refresh rate ("Auto (half refresh rate)") and start at 16 simultaneous sounds (shared `game-options.js`).
 
-**Benchmark** (`node tools/gfx-bench.mjs channel-keeper`; hook `tests/gfx-bench.mjs` picks the preset in Settings, starts Learn lesson 1 and loops carve → release → retry with real keys and buttons). Measured 2026-10-17 (AMD Radeon iGPU level 2 GPU time projected to the preset's floor level; RTX 5090 CPU time):
+**Benchmark** (`node tools/gfx-bench.mjs channel-keeper`; hook `tests/gfx-bench.mjs` picks the preset in Settings, starts Learn lesson 1 and loops carve → release → retry with real keys and buttons). Measured 2026-10-18 with the final gate (AMD Radeon iGPU level 2 GPU time minus the same page and preset re-recorded with every WebGL draw call skipped, percentile for percentile, projected to the preset's floor level: typical p50 ≤ 12 ms, slow p90 ≤ 14 ms; RTX 5090 CPU p90 ≤ 6 ms):
 
-- Desktop 1920×1080: FAIL low (GPU p90 12.71 ms → ≈ 19.22 ms at level 0, CPU 1.10 ms); PASS balanced (16.25 → ≈ 10.74 ms at level 4, CPU 1.40 ms); PASS high (27.95 → ≈ 5.34 ms at level 10, CPU 1.50 ms); PASS ultra (95.87 → ≈ 4.30 ms at level 17, CPU 1.70 ms).
-- Mobile 390×844 @3×: FAIL low (16.57 → ≈ 25.07 ms, CPU 1.10 ms); PASS balanced (15.46 → ≈ 10.22 ms at level 4, CPU 1.30 ms).
-- Low is at the benchmark's floor on this machine: a blank page that only clears a full-window WebGL canvas measured 11.44 ms p90 (≈ 17.3 ms at level 0) in the same session.
+- Desktop 1920×1080: PASS low (GPU p50 9.65 / p90 13.85 ms, draws skipped 10.75 / 12.12 → typical 0.00, slow 2.61 at level 0; CPU p90 1.00 ms); PASS balanced (GPU p50 11.55 / p90 12.60 ms, draws skipped 10.06 / 13.77 → typical 0.98, slow 0.00 at level 4; CPU p90 1.30 ms); PASS high (GPU p50 16.52 / p90 19.34 ms, draws skipped 9.40 / 15.33 → typical 1.36, slow 0.76 at level 10; CPU p90 1.20 ms); PASS ultra (GPU p50 80.91 / p90 86.07 ms, draws skipped 12.19 / 13.18 → typical 3.08, slow 3.27 at level 17; CPU p90 1.30 ms).
+- Mobile 390×844 @3×: PASS low (GPU p50 14.18 / p90 16.87 ms, draws skipped 14.03 / 16.92 → typical 0.24, slow 0.00 at level 0; CPU p90 0.80 ms); PASS balanced (GPU p50 11.02 / p90 17.07 ms, draws skipped 13.98 / 17.02 → typical 0.00, slow 0.03 at level 4; CPU p90 1.10 ms).
 
 **Typography.** System UI stack; logo `clamp(2rem, 6vw, 3.2rem)` in accent with a soft glow; rail headings uppercase 0.8 rem; tabular numerals in the score table; `Larger text` raises the root size to 20 px.
 
