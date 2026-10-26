@@ -1,14 +1,16 @@
 {
   "name": "channel-keeper",
   "version": "1.0.0",
-  "description": "Carve channels through terrain to guide flowing water to a target while avoiding contaminants.",
-  "type": "module",
+  "description": "Channel Keeper — carve channels through terrain to guide flowing water to a target while avoiding contaminants, on the StarHermit engine.",
   "private": true,
+  "type": "module",
   "scripts": {
-    "test": "node tests/run-tests.mjs && node --test tests/gfx.test.mjs tests/platform.test.mjs tests/i18n.test.mjs",
-    "test:e2e": "node tests/e2e.mjs",
-    "test:smoke": "node tests/smoke.mjs",
-    "capture": "node tests/capture.mjs",
+    "test": "npm run test:unit && npm run test:native",
+    "test:unit": "node tests/run-tests.mjs && node --test tests/i18n.test.mjs tests/migrate.test.mjs",
+    "test:native": "node tests/native.mjs",
+    "test:browser": "node tools/browser-play.mjs .",
+    "package": "node tools/package-web.mjs",
+    "css": "node tools/css.mjs",
     "start": "node server.js 8080"
   },
   "license": "SEE LICENSE IN LICENSE.md",

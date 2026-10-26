@@ -15,11 +15,11 @@ function checksum(obj) {
   return (h >>> 0).toString(16).padStart(8, '0');
 }
 
-function wrap(data) {
+export function wrap(data) {
   return { v: VERSION, data, sum: checksum(data) };
 }
 
-function unwrap(raw) {
+export function unwrap(raw) {
   try {
     const doc = JSON.parse(raw);
     if (!doc || doc.v !== VERSION || !doc.data) return null;

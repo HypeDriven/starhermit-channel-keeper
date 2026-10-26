@@ -1,0 +1,52 @@
+# Practice (Medium): hint, a dig and its undo, the pause sheet with Settings
+# and Help, Resume, then Leave round to the abandoned round's results.
+until 300 Daily Challenge
+frames 10
+click Play
+until 60 Choose a mode
+frames 10
+click Practice
+until 60 Practice allows undo
+frames 10
+click Medium
+frames 5
+save practice-setup
+click Start practice round
+until 120 Release
+frames 60
+key KeyH 2
+until 30 Try digging row
+frames 5
+key Enter 2
+frames 10
+save hinted
+key KeyU 2
+until 30 Undone.
+frames 5
+key Escape 2
+until 60 Leave round
+frames 10
+save pause
+click Settings
+until 60 Color palette
+frames 10
+save settings
+click Done
+until 60 Leave round
+frames 10
+click Help
+until 60 Foul pockets
+frames 10
+save help
+click Done
+until 60 Leave round
+frames 10
+click Resume
+frames 10
+key Escape 2
+until 60 Leave round
+frames 10
+click Leave round
+until 120 Round abandoned.
+frames 20
+save abandoned

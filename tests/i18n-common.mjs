@@ -5,8 +5,6 @@ import vm from 'node:vm';
 export const LOCALES = ['en-US', 'en-GB', 'es-419', 'es-ES', 'de-DE', 'fr-FR', 'fr-CA', 'pt-BR', 'it-IT'];
 export const FULL = ['es-419', 'de-DE', 'fr-FR', 'pt-BR', 'it-IT'];
 
-const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', '#39': "'" };
-const decode = (s) => s.replace(/&(#?\w+);/g, (m, e) => ENTITIES[e] ?? m);
 export const norm = (s) => String(s).replace(/\s+/g, ' ').trim();
 const unq = (s) => s.replace(/\\'/g, "'").replace(/\\"/g, '"');
 
@@ -27,30 +25,6 @@ export function codeKeys(src, extraFns = [], baseFns = ['T', 'N']) {
     keys.add(unq(m[1] ?? m[2])); keys.add(unq(m[3] ?? m[4]));
   }
   return [...keys].filter((k) => /[A-Za-z]/.test(k));
-}
-
-/** English keys in the static <body> markup, as js/i18n.js collects them at runtime. */
-export function htmlKeys(html) {
-  const keys = new Set();
-  let body = html.slice(html.indexOf('<body'), html.lastIndexOf('</body>'));
-  body = body.replace(/<!--[\s\S]*?-->/g, '').replace(/<(script|style|noscript)\b[\s\S]*?<\/\1>/g, '');
-  // Rich-text elements: the whole innerHTML is the key.
-  body = body.replace(/<(\w+)([^>]*\bdata-i18n-html\b[^>]*)>([\s\S]*?)<\/\1>/g, (m, tag, attrs, inner) => {
-    keys.add(norm(inner));
-    return `<${tag}${attrs}></${tag}>`;
-  });
-  // Skipped subtrees: remove the element's contents (single level of same-tag nesting is not supported).
-  body = body.replace(/<(\w+)([^>]*\bdata-i18n-skip\b[^>]*)>([\s\S]*?)<\/\1>/g, '<$1$2></$1>');
-  body = body.replace(/<kbd\b[^>]*>[\s\S]*?<\/kbd>/g, '<kbd></kbd>');
-  for (const m of body.matchAll(/\b(aria-label|title|placeholder|alt)="([^"]*)"/g)) {
-    const v = norm(decode(m[2]));
-    if (/[A-Za-z]/.test(v)) keys.add(v);
-  }
-  for (const m of body.matchAll(/>([^<>]+)</g)) {
-    const v = norm(decode(m[1]));
-    if (/[A-Za-z]/.test(v)) keys.add(v);
-  }
-  return [...keys];
 }
 
 /** Problems: missing translations in full locales, placeholder drift, stale or unknown keys. */
@@ -77,26 +51,13 @@ export function audit(tables, used) {
   return problems;
 }
 
-/** Build a sandbox with sh-language.js + strings + i18n loaded; returns the game's I18N global. */
-export function bootI18n(root, { strings, i18n, global, languages = ['de-DE'] }) {
-  const events = [];
-  const doc = {
-    documentElement: { lang: 'en' }, body: null,
-    dispatchEvent: (e) => events.push(e.detail.lang),
-    addEventListener() {},
-  };
-  const sandbox = {
-    document: doc, location: { search: '' },
-    navigator: { languages, language: languages[0] },
-    localStorage: { getItem: () => null, setItem: () => {} },
-    CustomEvent: class { constructor(t, o) { this.type = t; this.detail = o.detail; } },
-    URLSearchParams,
-  };
-  sandbox.self = sandbox; sandbox.window = sandbox;
+/** Load strings + the classic i18n.js in a sandbox; returns the game's I18N global. */
+export function bootI18n(root, { strings, i18n, global }) {
+  const sandbox = {};
+  sandbox.self = sandbox;
   vm.createContext(sandbox);
   const read = (p) => readFileSync(new URL(p, root), 'utf8');
-  vm.runInContext(read('sh-language.js'), sandbox);
   vm.runInContext(read(strings), sandbox);
   vm.runInContext(read(i18n), sandbox);
-  return { I18N: sandbox[global], events, doc };
+  return { I18N: sandbox[global] };
 }

@@ -1,0 +1,56 @@
+# Title → Play → Journey → Stage 1 dug by the keyboard straight down from the
+# spring (six digs), the water released and delivered to the well: the
+# results with the score, then Next stage (Tab from Retry) to stage 2.
+until 300 Daily Challenge
+frames 150
+save title
+frames 5
+click Play
+until 60 Choose a mode
+frames 10
+save modes
+click Journey
+until 60 Forty stages
+frames 10
+save journey
+click Stage 1
+until 120 Release
+frames 60
+save stage1
+key Enter 2
+frames 5
+key ArrowDown 2
+frames 5
+key Enter 2
+frames 5
+key ArrowDown 2
+frames 5
+key Enter 2
+frames 5
+key ArrowDown 2
+frames 5
+key Enter 2
+frames 5
+key ArrowDown 2
+frames 5
+key Enter 2
+frames 5
+key ArrowDown 2
+frames 5
+key Enter 2
+frames 20
+save dug
+key KeyR 2
+frames 90
+save flowing
+until 900 Well filled!
+expect The well drank its fill of clean water.
+expect 590
+frames 30
+save results
+key Tab 2
+frames 5
+key Enter 2
+until 120 Release
+frames 30
+save stage2

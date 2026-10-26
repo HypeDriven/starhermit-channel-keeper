@@ -1,0 +1,128 @@
+/* Channel Keeper — the browser build's css/style.css rewritten class-based
+   for the engine's UI (`npm run css` converts it into assets/ui-style.json).
+   Element selectors, ids, attribute selectors, @media and the body classes
+   (high-contrast, large-text, reduced-motion) do not convert: every widget
+   names its classes, the breakpoints are layouts picked in native/screens.ts,
+   and high contrast, text size and reduced motion are the runtime's. */
+
+:root {
+  --bg: #0b0e14;
+  --panel: #151a24;
+  --panel-2: #1c2330;
+  --text: #e8edf4;
+  --dim: #9aa7b8;
+  --accent: #3ec6ff;
+  --accent-2: #7dffc8;
+  --danger: #ff6050;
+  --water: #3ec6ff;
+  --focus: #ffd75e;
+  --line: #2c3648;
+  --edge: #263144;
+  --rail-edge: #222c3e;
+  --well: #0d1420;
+}
+
+* { box-sizing: border-box; }
+
+/* ---------------------------------------------------------------- buttons */
+.btn {
+  border: 1px solid var(--line); border-radius: 10px;
+  background: var(--panel-2); color: var(--text);
+  padding: 10.4px 17.6px; font-size: 16px;
+  min-height: 44px; min-width: 44px; text-align: center;
+}
+.btn:hover { background: #243043; }
+.btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: 0.45; }
+.btn-primary { background: #14425c; border-color: #1f6a94; }
+.btn-primary:hover { background: #1a5375; }
+.btn-big { font-size: 20.8px; padding: 14.4px 22.4px; }
+.btn-small { min-height: 40px; padding: 7.2px 12.8px; font-size: 14.4px; }
+.btn-danger { border-color: #6e2b24; background: #3a1614; }
+.btn-danger:hover { background: #4d1d1a; }
+.btn-tray { padding: 8.8px 6.4px; font-size: 14.7px; }
+.kbd {
+  background: var(--well); border: 1px solid var(--line); border-radius: 4px;
+  padding: 0 5px; font-size: 12.8px; color: var(--text);
+}
+
+/* ---------------------------------------------------------------- text */
+.logo { font-size: 51.2px; font-weight: 700; color: var(--accent); text-align: center; }
+.tagline { color: var(--dim); text-align: center; }
+.h2 { font-size: 24px; font-weight: 700; color: var(--text); }
+.h3 { font-size: 18.7px; font-weight: 700; color: var(--text); }
+.body { color: var(--text); }
+.dim { color: var(--dim); }
+.dim-small { color: var(--dim); font-size: 13.6px; }
+.accent { color: var(--accent); }
+
+/* ---------------------------------------------------------------- art */
+.title-art { border-radius: 14px; border: 1px solid var(--line); background: var(--panel); }
+.results-art { border-radius: 10px; border: 1px solid var(--line); background: var(--panel); }
+
+/* ---------------------------------------------------------------- cards and levels */
+.card {
+  background: var(--panel); border: 1px solid var(--edge); border-radius: 10px;
+  padding: 16px; color: var(--text); text-align: start; font-size: 16px; min-height: 44px;
+}
+.card:hover { background: var(--panel-2); }
+.card-name { font-size: 18.4px; font-weight: 700; color: var(--accent); }
+.card-desc { color: var(--text); }
+.card-meta { color: var(--dim); font-size: 13.6px; }
+.level-item {
+  background: var(--panel); border: 1px solid var(--edge); border-radius: 10px;
+  color: var(--text); padding: 9.6px; text-align: start; min-height: 44px;
+}
+.level-item:hover { background: var(--panel-2); }
+.level-item:disabled { opacity: 0.4; }
+.level-done { border-color: #2f6a55; }
+.level-mastery { border-color: #6a562f; }
+.level-name { font-weight: 700; color: var(--text); font-size: 14.4px; }
+.level-meta { color: var(--dim); font-size: 13.6px; }
+.level-stars { color: var(--accent-2); font-size: 13.6px; }
+.setup-panel {
+  background: var(--panel); border: 1px solid var(--edge); border-radius: 10px; padding: 16px;
+}
+
+/* ---------------------------------------------------------------- play */
+.rail { background: var(--panel); padding: 12.8px; }
+.rail-left { background: var(--panel); border-right: 1px solid var(--rail-edge); padding: 12.8px; }
+.rail-right { background: var(--panel); border-left: 1px solid var(--rail-edge); padding: 12.8px; }
+.rail-h { font-size: 12.8px; font-weight: 700; color: var(--dim); }
+.hud-k { color: var(--dim); }
+.hud-v { color: var(--text); font-weight: 700; }
+.bar { background: var(--well); border-radius: 4px; }
+.bar-fill { background: var(--water); border-radius: 4px; }
+.tutorial-panel {
+  background: var(--panel-2); border: 1px solid #2c4a66; border-radius: 10px; padding: 12.8px;
+}
+.tutorial-floating {
+  background: var(--panel-2); border: 1px solid #2c4a66; border-radius: 10px; padding: 8px 11.2px;
+  box-shadow: 0 8px 30px #00000080;
+}
+.tut-h { font-size: 17px; font-weight: 700; color: var(--accent); }
+.tut-text { color: var(--text); font-size: 14.7px; }
+.tray { background: var(--panel); border-top: 1px solid var(--rail-edge); padding: 8px; }
+
+/* ---------------------------------------------------------------- sheets */
+.score-th { color: var(--dim); }
+.score-td { color: var(--text); }
+.score-total { color: var(--text); font-weight: 700; font-size: 18.4px; }
+.rule { background: var(--line); }
+.help-card { background: var(--panel-2); border-radius: 10px; padding: 12.8px; }
+.help-text { color: var(--dim); font-size: 14.4px; }
+.achv-item { background: var(--panel-2); border-radius: 10px; padding: 9.6px 12.8px; }
+.achv-locked { background: var(--panel-2); border-radius: 10px; padding: 9.6px 12.8px; opacity: 0.5; }
+.achv-chip { background: #2c4a24; border: 1px solid #4a7a3a; border-radius: 999px; padding: 4px 11.2px; font-size: 13.6px; color: var(--text); }
+.board-th { color: var(--dim); font-size: 14.4px; }
+.board-td { color: var(--text); font-size: 14.4px; }
+.board-you { color: var(--accent-2); font-size: 14.4px; }
+.fieldset { border: 1px solid var(--edge); border-radius: 10px; padding: 12.8px; }
+.legend { color: var(--accent); }
+
+/* ---------------------------------------------------------------- toast and captions */
+.toast {
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 19px;
+  padding: 8px 19.2px; color: var(--text); text-align: center;
+}
+.captions { color: var(--dim); font-size: 13.6px; text-align: center; }

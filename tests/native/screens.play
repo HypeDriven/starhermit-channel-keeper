@@ -1,0 +1,58 @@
+# The title's sheets (Scores, Achievements, How to play, Settings with the
+# erase confirmation), the Challenge list, then the Daily round with the
+# pause sheet and Leave round.
+until 300 Daily Challenge
+frames 10
+click Scores
+until 60 No scores yet.
+frames 10
+save scores
+click Done
+until 60 Daily Challenge
+frames 10
+click Achievements
+until 60 Crystal Clear
+frames 10
+save achievements
+click Done
+until 60 Daily Challenge
+frames 10
+click Help
+until 60 The well
+frames 10
+click Done
+until 60 Daily Challenge
+frames 10
+click Settings
+until 60 Hold/drag to dig
+frames 10
+click Erase local progress
+until 30 Erase all local progress
+frames 10
+save settings-erase
+click Cancel
+frames 10
+click Done
+until 60 Daily Challenge
+frames 10
+click Play
+until 60 Choose a mode
+frames 10
+click Challenge
+until 60 Shovel-Rationed
+frames 10
+save challenges
+key Escape 2
+until 60 Choose a mode
+frames 10
+click Daily
+until 120 Release
+frames 60
+save daily
+key Escape 2
+until 60 Leave round
+frames 10
+click Leave round
+until 120 Round abandoned.
+frames 10
+save daily-left

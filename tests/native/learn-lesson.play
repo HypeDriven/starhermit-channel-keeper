@@ -1,0 +1,41 @@
+# Learn → First Dig: the lesson's steps followed by the keyboard (dig at the
+# focused cells, then down to the well), the water released into the well;
+# the results count the lesson, and Next lesson opens Sideways Flow.
+until 300 Daily Challenge
+frames 10
+click Play
+until 60 Choose a mode
+frames 10
+click Learn
+until 60 Interactive lessons. Each
+frames 10
+save lessons
+click First Dig
+until 120 step 1 of 3
+frames 30
+save lesson1
+key Enter 2
+until 30 step 2 of 3
+frames 5
+key Enter 2
+until 30 step 3 of 3
+frames 5
+key ArrowDown 2
+frames 5
+key Enter 2
+frames 5
+key ArrowDown 2
+frames 5
+key Enter 2
+frames 5
+key KeyR 2
+until 900 Well filled!
+expect Lessons: 1 / 5.
+frames 30
+save lesson-results
+key Tab 2
+frames 5
+key Enter 2
+until 120 Sideways Flow — step 1 of 3
+frames 20
+save lesson2
