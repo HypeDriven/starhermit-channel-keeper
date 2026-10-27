@@ -23,7 +23,7 @@ import { TextureLoader, type Texture } from "starhermit:scene";
 import { PHASE } from "../js/rules.js";
 import { ACHIEVEMENTS, CHALLENGES, CONTENT_VERSION, JOURNEY, PRACTICE_DIFFICULTIES, TUTORIALS } from "../js/content.js";
 import { loadBoards } from "../js/storage.js";
-import { N, pt, tr } from "./i18n.ts";
+import { N, currentLocale, pt, tr } from "./i18n.ts";
 import * as platform from "./platform.ts";
 import * as render from "./render.ts";
 import {
@@ -103,7 +103,8 @@ function table(label: string, rows: [string, string, string?][], w: number, kCls
 function rule(w: number): void {
   ui.widget("", { role: "none", size: { width: w, height: 1 }, draw: (r) => draw.rect(r.x, r.y, r.width, Math.max(1, r.height), COLORS.line) });
 }
-const fmtInt = (n: number): string => new Intl.NumberFormat("en-US").format(Math.round(n));
+// The player's locale; +0 turns a rounded -0 (a zero penalty) into 0.
+const fmtInt = (n: number): string => new Intl.NumberFormat(currentLocale()).format(Math.round(n) + 0);
 const keyOf = (action: string): string => bindingLabel(action);
 
 // ------------------------------------------------------------------ art
@@ -427,7 +428,7 @@ function playScreen(L: Layout): void {
       ui.row("tray-row", () => {
         for (const b of tray) {
           const style = b.style ?? ["btn", "btn-tray"];
-          const fits = buttonWidth({ ...b, style }) <= bw;
+          const fits = textWidth(b.text, style) + 10 <= bw;
           const opts: ui.ButtonOptions = { disabled: !!b.disabled };
           if (!fits) opts.content = () => ui.style({ text: { size: 12, align: "center" } }).paragraph(b.text, bw - 14);
           if (ui.style(...style, { width: bw, padding: { start: 4, end: 4 } }).id(b.id).button(b.text, opts)) b.act();
@@ -491,7 +492,7 @@ function resultsSheet(L: Layout): void {
   if (!r) { closeOverlay("results"); return; }
   dialogFrame("results", tr(r.won ? "Well filled!" : "The water is spent"), L, 672, (w) => {
     const pic = r.won ? art.won : art.lost;
-    if (pic) artImage(pic, w, Math.max(110, Math.min(200, L.lh * 0.22)), "results-art");
+    if (pic && L.lh >= 480) artImage(pic, w, Math.max(110, Math.min(200, L.lh * 0.22)), "results-art");
     const reasons: Record<string, string> = {
       "target-filled": N("The well drank its fill of clean water."),
       "settled-dry": N("The water settled before reaching the well."),
