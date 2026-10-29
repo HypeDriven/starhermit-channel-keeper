@@ -14,30 +14,28 @@
 //   the cell's kind rides in each instance's custom slot (the old aKind
 //   attribute), the clay strata and the wet channel floor are a surface
 //   hook, the water's shimmer is a surface hook over its world position.
-// - bumpMap is not drawn by the engine: the grain textures' heights become
-//   a normal map (normalMap) with the same relief.
 // - DodecahedronGeometry boulders with flatShading are low-segment spheres
 //   made non-indexed (face normals), displaced the same way when detailed.
 // - The EffectComposer chain (GTAO, UnrealBloom, OutputPass, the grade
 //   ShaderPass, SMAA / FXAA / MSAA) is renderer.ao / bloom / grade /
 //   antialias; the grade's GLSL is the built-in display-space grade with the
 //   same curve, tints and vignette.
-// - The fitted shadow box is the engine's view-based directional shadow.
 // - The playfield between the rails is a view offset: the camera spans the
 //   window and the board is fitted and centred in the free rectangle the
 //   screens leave (setPlayfield), where the browser build sized its canvas
 //   to the DOM's playfield element.
 // - Picking intersects the ray with the board's plane (the old invisible
 //   pick plane; the engine's rays skip invisible meshes).
-// - Light intensities are three.js r160's divided by π (the engine's
-//   convention). Context-loss recovery, the adaptive resolution and the fps
+// - Lights, shadows (the fitted shadow box), the room environment and the
+//   bump-mapped grain are the page's own values (three.js r166 parity at
+//   engine minor 28). Context-loss recovery, the adaptive resolution and the fps
 //   meter are gone: the runtime owns them.
 import {
   ACESFilmicToneMapping, AdditiveBlending, BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, Color, ConeGeometry,
-  CylinderGeometry, DataTexture, DirectionalLight, DoubleSide, EdgesGeometry, Euler, Fog, Group, HemisphereLight, InstancedMesh,
+  CylinderGeometry, DirectionalLight, DoubleSide, EdgesGeometry, Euler, Fog, Group, HemisphereLight, InstancedMesh,
   LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, MeshPhysicalMaterial,
-  MeshStandardMaterial, NoColorSpace, PMREMGenerator, PerspectiveCamera, PlaneGeometry, Points, PointsMaterial, PointLight,
-  Quaternion, Raycaster, RepeatWrapping, RingGeometry, RoomEnvironment, SRGBColorSpace, SphereGeometry, TorusGeometry, Vector2,
+  MeshStandardMaterial, PMREMGenerator, PerspectiveCamera, PlaneGeometry, Points, PointsMaterial, PointLight,
+  Quaternion, Raycaster, RepeatWrapping, RingGeometry, RoomEnvironment, SRGBColorSpace, SphereGeometry, TorusGeometry,
   Vector3, Vector4, pointerToNdc, renderer, scene,
 } from "starhermit:scene";
 import type { Material, MaterialHooks, Object3D, Texture } from "starhermit:scene";
@@ -141,32 +139,14 @@ function grainCanvas(size: number, seed: number, pebbles: number, pebbleAlpha = 
   }
   return cv;
 }
-/** The grain's greys as heights → tangent-space normals (the old bumpMap's relief). */
-function normalFrom(cv: OffscreenCanvas, strength: number): Uint8Array {
-  const size = cv.width;
-  const src = cv.getContext("2d").getImageData(0, 0, size, size).data;
-  const out = new Uint8Array(size * size * 4);
-  const hAt = (x: number, y: number): number => src[(((y + size) % size) * size + ((x + size) % size)) * 4]! / 255;
-  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
-    const dx = (hAt(x + 1, y) - hAt(x - 1, y)) * strength;
-    const dy = (hAt(x, y + 1) - hAt(x, y - 1)) * strength;
-    const len = Math.hypot(dx, dy, 1);
-    const k = (y * size + x) * 4;
-    out[k] = Math.round((-dx / len * 0.5 + 0.5) * 255);
-    out[k + 1] = Math.round((dy / len * 0.5 + 0.5) * 255);
-    out[k + 2] = Math.round((1 / len * 0.5 + 0.5) * 255);
-    out[k + 3] = 255;
-  }
-  return out;
-}
-interface Grain { canvas: OffscreenCanvas; normal: Uint8Array }
+interface Grain { canvas: OffscreenCanvas }
 const grains = new Map<string, Grain>();
-function grain(size: number, seed: number, pebbles: number, alpha: number, relief: number): Grain {
+function grain(size: number, seed: number, pebbles: number, alpha: number): Grain {
   const key = `${size}:${seed}`;
   let g = grains.get(key);
   if (!g) {
     const canvas = grainCanvas(size, seed, pebbles, alpha);
-    g = { canvas, normal: normalFrom(canvas, relief) };
+    g = { canvas };
     grains.set(key, g);
   }
   return g;
@@ -180,16 +160,6 @@ function colorMap(g: Grain, rx: number, ry: number): Texture {
   grainMaps.add(t);
   return t;
 }
-/** The grain's normal map at a repeat (each texture keeps its own UV transform). */
-function normalMap(g: Grain, rx: number, ry: number): Texture {
-  const t = new DataTexture(g.normal.slice(), g.canvas.width, g.canvas.height);
-  t.colorSpace = NoColorSpace;
-  t.wrapS = t.wrapT = RepeatWrapping;
-  t.repeat.set(rx, ry);
-  grainMaps.add(t);
-  return t;
-}
-
 // --- colour helpers -------------------------------------------------------------------------------
 /** three.js Color.set(hex).offsetHSL(0, 0, dl): the lightness moved in sRGB HSL. (The
  * engine's Color.setHSL takes the components as they are, without three.js's
@@ -218,8 +188,8 @@ function offsetL(hex: number, dl: number, target: Color): Color {
 
 // --- scene state --------------------------------------------------------------------------------
 const camera = new PerspectiveCamera(FRAMING.fov, 16 / 9, 0.1, 200);
-const key = new DirectionalLight(0xffeedd, 3.0 / PI);
-const hemi = new HemisphereLight(0x9fb8d8, 0x2a2018, 0.9 / PI);
+const key = new DirectionalLight(0xffeedd, 3.0);
+const hemi = new HemisphereLight(0x9fb8d8, 0x2a2018, 0.9);
 const boardGroup = new Group();
 const envGroup = new Group();
 const fxGroup = new Group();
@@ -256,7 +226,7 @@ function setup(): void {
   built = true;
   key.position.set(6, 10, 12);
   key.shadow.bias = -0.0004;
-  key.shadow.distance = 60;
+  key.shadow.normalBias = 0.02;
   scene.add(key, key.target, hemi, boardGroup, envGroup, fxGroup, points, motes);
   renderer.toneMapping = ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.1;
@@ -268,7 +238,7 @@ function colorOf(k: "water" | "dirty" | "contam" | "target"): number {
 }
 
 /** A lit material for the preset budget: Lambert on Low, standard on Balanced, physical (clearcoat) above. */
-interface LitParams { color?: number | Color; roughness?: number; metalness?: number; transparent?: boolean; opacity?: number; clearcoat?: number; clearcoatRoughness?: number; emissive?: number; emissiveIntensity?: number; map?: Texture | null; normalMap?: Texture | null; normalScale?: Vector2 }
+interface LitParams { color?: number | Color; roughness?: number; metalness?: number; transparent?: boolean; opacity?: number; clearcoat?: number; clearcoatRoughness?: number; emissive?: number; emissiveIntensity?: number; map?: Texture | null; bumpMap?: Texture | null; bumpScale?: number }
 function lit(p: LitParams): Material {
   const kind = look!.budget.material;
   const { clearcoat, clearcoatRoughness, roughness, metalness, ...common } = p;
@@ -320,13 +290,8 @@ export function loadLevel(lv: Level): void {
 
   // -- solid cells: one instanced mesh, per-instance colour and kind --
   const cellGeo = detailed ? roundedBox(0.94, 0.94, 0.55, B.bevel, 0.07) : new BoxGeometry(0.94, 0.94, 0.55);
-  let cellMap: Texture | null = null, cellNormal: Texture | null = null;
-  if (detailed) {
-    const g = grain(B.grain, 7, 26, 1, 4.8);
-    cellMap = colorMap(g, 1, 1);
-    cellNormal = normalMap(g, 1, 1);
-  }
-  const cellMat = lit({ roughness: 0.9, metalness: 0.02, map: cellMap, normalMap: cellNormal, normalScale: new Vector2(1, 1) });
+  const cellMap = detailed ? colorMap(grain(B.grain, 7, 26, 1), 1, 1) : null;
+  const cellMat = lit({ roughness: 0.9, metalness: 0.02, map: cellMap, bumpMap: cellMap, bumpScale: 1.2 });
   if (detailed) cellMat.hooks = cellHooks;
   cellUniforms.uDetail.value = detailed ? 1 : 0;
   cellMesh = new InstancedMesh(cellGeo, cellMat, n);
@@ -383,7 +348,7 @@ export function loadLevel(lv: Level): void {
       lip.position.set(0, 0.42, 0);
       lip.rotation.x = PI / 2;
       pipe.add(lip);
-      sourceGlow = new PointLight(colorOf("water"), 6 / PI, 6);
+      sourceGlow = new PointLight(colorOf("water"), 6, 6);
       sourceGlow.position.set(wx, wy, 1.2);
       boardGroup.add(sourceGlow);
     } else if (t === CELL.TARGET) {
@@ -394,7 +359,7 @@ export function loadLevel(lv: Level): void {
       ring.position.set(wx, wy, 0.4);
       boardGroup.add(ring);
       targetRing = ring;
-      const tl = new PointLight(colorOf("target"), 5 / PI, 7);
+      const tl = new PointLight(colorOf("target"), 5, 7);
       tl.position.set(wx, wy, 1.2);
       boardGroup.add(tl);
     }
@@ -417,30 +382,41 @@ export function loadLevel(lv: Level): void {
   resetParticles();
 }
 
+/** The page's shadow frustum fitted to the board plus a small margin (texel-dense). */
+function fitShadow(): void {
+  const { w, h } = level!;
+  const ext = Math.max(w, h) / 2 + 2.5;
+  const sc = key.shadow.camera;
+  key.target.position.set(0, 0, 0);
+  key.position.set(6, 10, 12).setLength(30);
+  Object.assign(sc, { left: -ext - 1, right: ext + 1, top: ext + 1, bottom: -ext - 1, near: 10, far: 55 });
+  sc.updateProjectionMatrix();
+  key.target.updateMatrixWorld();
+}
+
 function buildEnvironment(rng: ReturnType<typeof makeRng>): void {
   const { w, h } = level!;
   const detailed = look!.detailed;
-  let backMap: Texture | null = null, floorMap: Texture | null = null, backNormal: Texture | null = null, floorNormal: Texture | null = null;
+  let backMap: Texture | null = null, floorMap: Texture | null = null;
   if (detailed) {
-    const g = grain(look!.budget.grain * 2, 11, 40, 0.45, 8);
+    const g = grain(look!.budget.grain * 2, 11, 40, 0.45);
     backMap = colorMap(g, (w + 30) / 4, (h + 30) / 4);
-    backNormal = normalMap(g, (w + 30) / 4, (h + 30) / 4);
     floorMap = colorMap(g, (w + 30) / 5, 6);
-    floorNormal = normalMap(g, (w + 30) / 5, 6);
   }
   // Backdrop slab behind the board: the cavern wall.
   const back = new Mesh(new BoxGeometry(w + 30, h + 30, 1.5), lit({
-    color: new Color(theme.rock).multiplyScalar(detailed ? 0.6 : 1), roughness: 1, map: backMap, normalMap: backNormal, normalScale: new Vector2(1, 1),
+    color: new Color(theme.rock).multiplyScalar(detailed ? 0.6 : 1), roughness: 1, map: backMap, bumpMap: backMap, bumpScale: 2,
   }));
   back.position.set(0, 0, -1.1);
   back.receiveShadow = true;
   envGroup.add(back);
   // Floor.
-  const floor = new Mesh(new PlaneGeometry(w + 30, 30), lit({ color: theme.rock, roughness: 0.95, map: floorMap, normalMap: floorNormal, normalScale: new Vector2(1, 1) }));
+  const floor = new Mesh(new PlaneGeometry(w + 30, 30), lit({ color: theme.rock, roughness: 0.95, map: floorMap, bumpMap: floorMap, bumpScale: 2 }));
   floor.rotation.x = -PI / 2;
   floor.position.set(0, -h / 2 - 0.5, 6);
   floor.receiveShadow = true;
   envGroup.add(floor);
+  fitShadow();
   // Scattered boulders by detail tier.
   const count = Math.round(look!.budget.rocks * (detailed ? 1 : 0.5)) + 4;
   const rockGeo: BufferGeometry = new SphereGeometry(0.5, detailed ? 7 : 5, detailed ? 5 : 3).toNonIndexed();
@@ -742,7 +718,7 @@ function updateMotes(dt: number, t: number): void {
 function updateEnvironment(): void {
   if (!look!.detailed) { scene.environment = null; return; }
   if (!envTex) {
-    try { envTex = new PMREMGenerator().fromScene(new RoomEnvironment(), 0.04).texture; }
+    try { envTex = new PMREMGenerator(renderer).fromScene(new RoomEnvironment(renderer), 0.04).texture; }
     catch (e) { console.warn(`environment: ${e instanceof Error ? e.message : String(e)}`); envTex = null; }
   }
   scene.environment = envTex;
@@ -833,9 +809,9 @@ export function update(dtRaw: number): void {
   // idle cosmetics (skipped entirely under reduced motion)
   if (!reducedMotion) {
     if (targetRing) targetRing.scale.setScalar(1 + Math.sin(clock * 2.4) * 0.06);
-    if (sourceGlow) sourceGlow.intensity = (5 + Math.sin(clock * 3.1) * 1.5) / PI;
+    if (sourceGlow) sourceGlow.intensity = 5 + Math.sin(clock * 3.1) * 1.5;
     if (look.animatedBackground) {
-      key.intensity = (3.0 + Math.sin(clock * 1.3) * 0.08 + Math.sin(clock * 3.7) * 0.04) / PI;
+      key.intensity = 3.0 + Math.sin(clock * 1.3) * 0.08 + Math.sin(clock * 3.7) * 0.04;
       updateMotes(dt, clock);
     }
   }
