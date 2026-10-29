@@ -746,7 +746,8 @@ export function applyLook(next: Look): void {
     denoise: { lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: next.ao === "high" ? 6 : 4, rings: 2, samples: next.ao === "high" ? 16 : 8, radiusExponent: 2 },
   };
   // High threshold: only the water, the well's ring and the spring's glow bloom.
-  renderer.bloom = next.bloom ? { strength: 0.6, radius: 0.5, threshold: 0.86, resolution: next.budget.bloomRes } : null;
+  // The page's three r166 UnrealBloomPass strength squared: minor 29 bloom follows r185 (≈2.9× the light).
+  renderer.bloom = next.bloom ? { strength: 0.36, radius: 0.5, threshold: 0.86, resolution: next.budget.bloomRes } : null;
   // The grade pass: 0.22 of a smoothstep S-curve, +10 % saturation, cool
   // shadows / warm highlights (split 0.15–0.8), a 0.3 vignette from 0.38 to 0.9.
   renderer.grade = next.grade ? {
