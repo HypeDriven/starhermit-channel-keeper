@@ -195,18 +195,18 @@ Colour-vision palettes override water/dirty/foul/well hues (deuteranopia, protan
 
 **Graphics.** A key directional lamp (the engine's view-based shadow) plus a hemisphere fill, ACES filmic tone mapping (exposure 1.1); when detailed, a PMREM `RoomEnvironment` at `environmentIntensity` 0.28. Light intensities are the browser build's divided by π (the engine's convention). The post effects are the runtime's: ambient occlusion, bloom limited to the water, well ring and spring (threshold 0.86), a display-space grade with vignette, and FXAA/SMAA/MSAA.
 
-**Graphics levels.** The runtime's Options choose the graphics level; `native/quality.ts` maps its quality tier (`frame().quality`) to the browser build's preset of the same name and scales counts by the level within the tier (`frame().levelIndex`, ×1.64 a level, at most 4×). Auto, render scale, adaptive resolution, the frame-rate limit and readout are the runtime's.
+**Graphics levels.** The runtime's Options choose the graphics level; the engine-owned effects (shadows and their map size, AO, bloom, grade, anti-aliasing) are the level's own (`levelSettings()`, the table every StarHermit game reads; the rows below are each tier's anchor level: quantum, molecular, terrestrial, galactic), and `native/quality.ts` maps the level's quality tier to the browser build's art preset of the same name and scales counts by the level's particle budget against the anchor's (at most 4×). Auto, render scale, adaptive resolution, the frame-rate limit and readout are the runtime's.
 
 | Look | Low | Balanced | High | Ultra |
 |---|---|---|---|---|
-| Shadows / AO / bloom / grade / AA | off / off / off / off / off | 1024 / off / on / on / FXAA | 2048 / on / on / on / SMAA | 4096 / high / on / on / MSAA |
+| Shadows / AO / bloom / grade / AA (the level's) | off / off / off / off / off | 1024 / off / on / on / FXAA | 2048 / on / on / on / SMAA | 4096 / high / on / on / MSAA |
 | Surface detail, animated background and water | plain, static | detailed, animated | detailed, animated | detailed, animated |
 | Materials (cells, water, spikes, cavern, rocks) | Lambert | Standard | Standard + clearcoat water (Physical) | same as High |
 | Rounded-cell bevel segments (detailed) | 1 | 2 | 3 | 4 |
 | Grain texture cells / cavern wall (detailed) | 64 / 128 px | 128 / 256 | 256 / 512 | 256 / 512 |
-| Boulders at the tier's first level (plain = half) | 8 | 14 | 20 | 28 |
-| Splash particles at the tier's first level | 200 (cap 300) | 600 | 1200 | 2000 |
-| Bloom / AO resolution | ½ / ½ | ½ / ½ | ½ / ½ | full / full |
+| Boulders at the tier's anchor level (plain = half) | 8 | 14 | 20 | 28 |
+| Splash particles at the tier's anchor level | 200 (cap 300) | 600 | 1200 | 2000 |
+| Bloom / AO resolution / AO samples (the level's) | – | ½ / – | ½ / ½ / 8 | full / full / 16 |
 
 A level change that alters an asset (detail, material, bevel, grain, boulders) rebuilds the board in place; the round is untouched.
 

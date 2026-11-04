@@ -734,19 +734,21 @@ export function applyLook(next: Look): void {
   const shadows = next.shadows > 0;
   renderer.shadowMap.enabled = shadows;
   key.castShadow = shadows;
-  if (shadows) key.shadow.mapSize = next.shadows;
+  if (shadows) key.shadow.mapSize = next.shadows; // the level's size (since minor 23 the engine keeps the game's)
   updateEnvironment();
   particleCap = Math.max(1, Math.min(PCAP, next.budget.particles));
   waterUniforms.uWaterAnim.value = next.animatedWater ? 1 : 0;
   motes.visible = next.animatedBackground;
-  renderer.ao = next.ao === "off" ? null : {
-    blendIntensity: next.ao === "high" ? 0.85 : 0.7, radius: 0.6, distanceExponent: 1.4, thickness: 1.2, scale: 1.0,
-    samples: next.ao === "high" ? 16 : 8, resolution: next.budget.aoRes,
-    denoise: { lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: next.ao === "high" ? 6 : 4, rings: 2, samples: next.ao === "high" ? 16 : 8, radiusExponent: 2 },
+  // The level's AO samples and resolution; full resolution is the engine's "high" (stronger, wider denoise).
+  const ao = next.ao, full = !!ao && ao.resolution >= 1;
+  renderer.ao = ao && {
+    blendIntensity: full ? 0.85 : 0.7, radius: 0.6, distanceExponent: 1.4, thickness: 1.2, scale: 1.0,
+    samples: ao.samples, resolution: ao.resolution,
+    denoise: { lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: full ? 6 : 4, rings: 2, samples: ao.denoiseSamples, radiusExponent: 2 },
   };
   // High threshold: only the water, the well's ring and the spring's glow bloom.
   // The page's three r166 UnrealBloomPass at its own strength (bloom model r160, r169 and older).
-  renderer.bloom = next.bloom ? { model: "r160", strength: 0.6, radius: 0.5, threshold: 0.86, resolution: next.budget.bloomRes } : null;
+  renderer.bloom = next.bloom === null ? null : { model: "r160", strength: 0.6, radius: 0.5, threshold: 0.86, resolution: next.bloom };
   // The grade pass: 0.22 of a smoothstep S-curve, +10 % saturation, cool
   // shadows / warm highlights (split 0.15–0.8), a 0.3 vignette from 0.38 to 0.9.
   renderer.grade = next.grade ? {

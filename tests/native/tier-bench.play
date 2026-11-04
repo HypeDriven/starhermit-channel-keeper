@@ -1,0 +1,42 @@
+# Tier bench (tools/engine-tier-bench.mjs): journey stage 1 (a fixed level)
+# dug straight down from the spring as tests/native/journey-stage.play does,
+# then the released water measured from the spring until the well fills
+# (flowing water, splashes, the valley).
+until 300 Daily Challenge
+frames 30
+click Play
+until 60 Choose a mode
+frames 10
+click Journey
+until 60 Forty stages
+frames 10
+click Stage 1
+until 120 Release
+frames 120
+key Enter 2
+frames 5
+key ArrowDown 2
+frames 5
+key Enter 2
+frames 5
+key ArrowDown 2
+frames 5
+key Enter 2
+frames 5
+key ArrowDown 2
+frames 5
+key Enter 2
+frames 5
+key ArrowDown 2
+frames 5
+key Enter 2
+frames 5
+key ArrowDown 2
+frames 5
+key Enter 2
+frames 20
+key KeyR 2
+frames 10
+measure start
+until 900 Well filled!
+measure stop
