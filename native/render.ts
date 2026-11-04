@@ -35,7 +35,7 @@ import {
   CylinderGeometry, DirectionalLight, DoubleSide, EdgesGeometry, Euler, Fog, Group, HemisphereLight, InstancedMesh,
   LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, MeshPhysicalMaterial,
   MeshStandardMaterial, PMREMGenerator, PerspectiveCamera, PlaneGeometry, Points, PointsMaterial, PointLight,
-  Quaternion, Raycaster, RepeatWrapping, RingGeometry, RoomEnvironment, SRGBColorSpace, SphereGeometry, TorusGeometry,
+  Quaternion, Raycaster, RepeatWrapping, RingGeometry, RoomEnvironment, RoundedBoxGeometry, SRGBColorSpace, SphereGeometry, TorusGeometry,
   Vector3, Vector4, pointerToNdc, renderer, scene,
 } from "starhermit:scene";
 import type { Material, MaterialHooks, Object3D, Texture } from "starhermit:scene";
@@ -44,7 +44,6 @@ import { CELL, CELL_CAP } from "../js/rules.js";
 import { getTheme } from "../js/content.js";
 import { makeRng } from "../js/rng.js";
 import type { Look } from "./quality.ts";
-import { roundedBox } from "./rounded.ts";
 
 type Theme = ReturnType<typeof getTheme>;
 export interface Level { id: string; seed: number; w: number; h: number; cells: number[]; theme?: string }
@@ -289,7 +288,7 @@ export function loadLevel(lv: Level): void {
   const B = look.budget;
 
   // -- solid cells: one instanced mesh, per-instance colour and kind --
-  const cellGeo = detailed ? roundedBox(0.94, 0.94, 0.55, B.bevel, 0.07) : new BoxGeometry(0.94, 0.94, 0.55);
+  const cellGeo = detailed ? new RoundedBoxGeometry(0.94, 0.94, 0.55, B.bevel, 0.07) : new BoxGeometry(0.94, 0.94, 0.55);
   const cellMap = detailed ? colorMap(grain(B.grain, 7, 26, 1), 1, 1) : null;
   const cellMat = lit({ roughness: 0.9, metalness: 0.02, map: cellMap, bumpMap: cellMap, bumpScale: 1.2 });
   if (detailed) cellMat.hooks = cellHooks;

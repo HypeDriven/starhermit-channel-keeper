@@ -13,9 +13,9 @@
 // oscillators and filtered noise, are rendered once into clips (createClip)
 // with the same envelopes; the synthesized stand-ins it played while a
 // sample loaded are not ported (the engine's web runtime drops clip loads
-// while a synthesis graph changes: the arrow-exodus finding). Clips load
-// once the mixer runs (natively at once, in a browser after the first
-// press), one at a time; rendered voices are made one a frame after that.
+// while a synthesis graph changes: the arrow-exodus finding). The clips all
+// load at once in onStart; the rendered voices are made one a frame and the
+// sound starts once the mixer runs (in a browser after the first press).
 import { context, createClip, loadClip, play as playClip, type AudioClip, type Sound } from "starhermit:audio";
 import { makeRng } from "../js/rng.js";
 import { N } from "./i18n.ts";
@@ -36,18 +36,12 @@ export const CAPTIONS: Record<string, string> = {
 };
 
 const clips = new Map<string, AudioClip>();
-const queue: string[] = [];
-let loading = false;
-let wantClips = false;
-function load(name: string): void { if (!queue.includes(name) && !clips.has(name)) queue.push(name); }
-function pump(): void {
-  if (loading || !queue.length) return;
-  const name = queue.shift()!;
-  loading = true;
-  loadClip(`sfx/${name}.opus`).then((c) => { clips.set(name, c); loading = false; }, (e: unknown) => { console.warn(`sfx ${name}: ${String(e)}`); loading = false; });
+/** Loads every clip at once (onStart); a cue whose clip is still loading is skipped. */
+export function loadSfx(): void {
+  for (const name of new Set(Object.values(SAMPLES))) {
+    loadClip(`sfx/${name}.opus`).then((c) => { clips.set(name, c); }, (e: unknown) => console.warn(`sfx ${name}: ${String(e)}`));
+  }
 }
-/** Asks for the clips; they load once the mixer runs (see update). */
-export function loadSfx(): void { wantClips = true; }
 
 /** Plays a logical event's sample. */
 export function event(name: string): void {
@@ -55,7 +49,7 @@ export function event(name: string): void {
   const clip = file ? clips.get(file) : undefined;
   if (!clip) return;
   try { playClip(clip, { bus: "effects", gain: LEVEL.effects }); }
-  catch { clips.delete(file!); load(file!); } // a clip the mixer lost: load it again
+  catch { /* the mixer is full this frame: skip it */ }
 }
 
 // -- rendered voices ------------------------------------------------------------------------
@@ -119,16 +113,10 @@ const rng = makeRng(0xA0D10, "audio");
 let nextNote = 0;
 let ambSound: Sound | null = null;
 
-/** Each frame: the samples once the mixer runs, one rendered voice a frame,
+/** Each frame once the mixer runs: one rendered voice a frame,
  * then the ambience loop and the music's notes by mixer time. */
 export function update(): void {
   if (context.state !== "running") return;
-  if (wantClips) {
-    wantClips = false;
-    for (const name of new Set(Object.values(SAMPLES))) load(name);
-  }
-  pump();
-  if (loading || queue.length) return;
   try { if (renderNext()) return; } catch (e) { console.warn(`audio: ${String(e)}`); return; }
   const now = context.currentTime;
   if (!ambSound && ambience) {

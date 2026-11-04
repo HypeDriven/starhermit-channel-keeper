@@ -24,7 +24,6 @@
 | `native/main.ts` | Entry module: screen flow, cursor and input (actions, pointer, touch), digging/release/undo/hint/fast-forward, replay viewer, lessons, outcomes, boards, snapshot, lifecycle; the flow advances on the runtime's fixed 60 Hz steps |
 | `native/screens.ts` | Every screen, the HUD rails, touch tray, Info drawer, toast/captions and sheets (pause, results, settings, help, achievements, score chase) on `starhermit:ui` |
 | `native/render.ts` | The dig face on `starhermit:scene`: cells, water, spikes, pipe, well, cavern, boulders, cursor, ghost, particles, motes, camera fit/transition/shake, picking, the per-level look |
-| `native/rounded.ts` | RoundedBoxGeometry (three.js's, which the engine lacks) |
 | `native/quality.ts` | The old `gfx.js` presets and budgets keyed by the runtime's quality tier and level |
 | `native/audio.ts` | Authored clips per event, rendered music and ambience clips, captions table |
 | `native/platform.ts` | The save document, the `localStorage` shim for `js/storage.js`, game settings, browser-save and legacy-settings migration, player, invite, platform clock, high-score posting |
