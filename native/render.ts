@@ -645,6 +645,7 @@ const points = new Points(pGeo, new PointsMaterial({ size: 0.14, vertexColors: t
 points.frustumCulled = false;
 let pHead = 0;
 let particleCap = 300;
+let pActive = false; // nothing alive: the loop and its uploads rest
 function resetParticles(): void {
   pLife.fill(0);
   for (let i = 0; i < PCAP; i++) pPos[i * 3 + 2] = -50;
@@ -654,6 +655,7 @@ function resetParticles(): void {
 function burst(wx: number, wy: number, wz: number, color: number, count: number): void {
   if (reducedMotion) count = Math.min(count, 4);
   const n = Math.min(count, particleCap);
+  if (n > 0) pActive = true;
   _c.set(color);
   for (let k = 0; k < n; k++) {
     const i = pHead;
@@ -669,6 +671,7 @@ function burst(wx: number, wy: number, wz: number, color: number, count: number)
   }
 }
 function updateParticles(dt: number): void {
+  if (!pActive) return;
   let any = false;
   for (let i = 0; i < particleCap; i++) {
     if (pLife[i]! <= 0) continue;
@@ -680,6 +683,7 @@ function updateParticles(dt: number): void {
     pPos[i * 3 + 2] = pPos[i * 3 + 2]! + pVel[i * 3 + 2]! * dt;
     if (pLife[i]! <= 0) pPos[i * 3 + 2] = -50;
   }
+  pActive = any;
   if (any) {
     (pGeo.getAttribute("position") as BufferAttribute).needsUpdate = true;
     (pGeo.getAttribute("color") as BufferAttribute).needsUpdate = true;

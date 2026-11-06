@@ -23,7 +23,7 @@ import { ACHIEVEMENTS, CHALLENGES, CONTENT_VERSION, JOURNEY, TUTORIALS, dailyKey
 import { Session } from "../js/session.js";
 import { loadBoards, loadSessionSnapshot, submitScore, unlockAchievement } from "../js/storage.js";
 import * as audio from "./audio.ts";
-import { N, pt, tr } from "./i18n.ts";
+import { N, tr } from "./i18n.ts";
 import * as platform from "./platform.ts";
 import { lookFor } from "./quality.ts";
 import * as render from "./render.ts";
@@ -52,7 +52,6 @@ export const app = {
   overlayOpenedFrame: 0,
   focusNext: null as string | null,
   overlays: [] as OverlayName[],
-  toast: null as { text: () => string; until: number } | null,
   caption: null as { text: string; until: number } | null,
   results: null as Results | null,
   newly: [] as string[],
@@ -81,8 +80,15 @@ export function todayKey(): string { return dailyKey(new Date(platform.nowMs()))
 export function announce(msg: string, assertive = false): void {
   if (msg) ui.announce(msg.slice(0, 500), { politeness: assertive ? "assertive" : "polite" });
 }
-/** A transient toast; `text` re-reads in the current language. */
-export function toast(text: () => string, seconds = 2.6): void { app.toast = { text, until: now() + seconds }; }
+/** A transient toast, one at a time; over a round on a narrow window it stands clear of the action bar. */
+let shownToast: ui.Toast | null = null;
+export function toast(text: string, seconds = 2.6): void {
+  shownToast?.dismiss();
+  const offset = app.screen === "play" && ui.viewport!().width < 1024 ? 56 : 0; // the old distance from the edge − the stack's 16
+  shownToast = ui.toast!(text, { duration: seconds, style: ["toast", "toast-text"], dismissible: false, announce: false, offset });
+}
+/** Whether a toast is up (the caption line stands above it). */
+export function toastUp(): boolean { return !!shownToast?.queued; }
 function haptic(ms: number): void { if (settings.haptics) vibrate(ms); }
 function sound(name: string): void {
   audio.event(name);
@@ -196,7 +202,7 @@ export function startLevel(level: Level, mode: Mode, resume = false): void {
   if (game.mode === "learn" && level.tutorial) showTutorialStep();
   if (resume && session.state.tick > 0) {
     const st = session.state;
-    toast(() => tr("Welcome back — {n} units delivered, tick {tick} when you left.", { n: st.deliveredClean, tick: st.tick }));
+    toast(tr("Welcome back — {n} units delivered, tick {tick} when you left.", { n: st.deliveredClean, tick: st.tick }));
   }
   announce(tr("{name}. {goal} Dig budget {n}.", { name: levelName(level), goal: levelGoal(level), n: level.carveBudget }));
   sound("select");
@@ -218,7 +224,7 @@ export function resumeSnapshot(): void {
     (snap?.levelId?.startsWith("daily") ? dailyLevel(new Date(platform.nowMs())) as Level : null) ||
     (snap ? practiceLevel("medium", snap.seed ?? 0) as Level : null);
   if (lv && snap) startLevel(lv, snap.mode || "practice", true);
-  else toast(() => tr("Nothing to resume."));
+  else toast(tr("Nothing to resume."));
 }
 export function restartRound(): void {
   if (!game.level) return;
@@ -248,7 +254,7 @@ function handleEvents(events: RulesEvent[], state: Session["state"]): void {
         if (state.sourceLeft <= 0 && !game.springDry) {
           game.springDry = true;
           sound("springDry");
-          toast(() => tr("The spring has run dry."));
+          toast(tr("The spring has run dry."));
           announce(tr("The spring has run dry. The water still in the channels must reach the well on its own."));
         }
         break;
@@ -289,7 +295,7 @@ export function tryCarve(x: number, y: number, quiet = false): boolean {
     if (!quiet) {
       sound("invalid");
       app.caption = { text: "not allowed: " + reason, until: now() + 1.8 };
-      toast(() => explainReason(reason));
+      toast(explainReason(reason));
       announce(tr("Cannot dig: {reason}", { reason: explainReason(reason) }), true);
       render.setGhost(x, y, false);
       haptic(40);
@@ -305,7 +311,7 @@ export function doRelease(): void {
   const res = game.session.release();
   if (!res.ok && res.reason !== "duplicate") {
     sound("invalid");
-    toast(() => tr("Already released."));
+    toast(tr("Already released."));
   }
 }
 export function doUndo(): void {
@@ -314,26 +320,26 @@ export function doUndo(): void {
   if (!res.ok) {
     sound("invalid");
     const key = res.reason === "undo-disabled" ? N("Undo is only allowed in Practice and Learn.") : N("Nothing to undo.");
-    toast(() => tr(key));
-  } else toast(() => tr("Undone."));
+    toast(tr(key));
+  } else toast(tr("Undone."));
 }
 export function doHint(): void {
   const s = game.session;
   if (!s || game.watching) return;
   // Hints use the same legality and route APIs as play; never a separate rulebook.
   const route = findRoute(s.state.cells, s.state.w, s.state.h) as number[] | null;
-  if (!route) { toast(() => tr("No clean route exists from here — consider restarting.")); return; }
+  if (!route) { toast(tr("No clean route exists from here — consider restarting.")); return; }
   const next = route.find((i) => s.state.cells[i] === CELL.SOIL || s.state.cells[i] === CELL.HARD);
   if (next == null) {
     const key = s.state.phase === PHASE.EDITING ? N("The route is open — release the water!") : N("The route is set; let it flow.");
-    toast(() => tr(key));
+    toast(tr(key));
     return;
   }
   const x = next % s.state.w, y = Math.floor(next / s.state.w);
   game.cursor = { x, y };
   updateCursor();
   render.setGhost(x, y, true);
-  toast(() => tr("Try digging row {r}, column {c}.", { r: y + 1, c: x + 1 }));
+  toast(tr("Try digging row {r}, column {c}.", { r: y + 1, c: x + 1 }));
   announce(tr("Hint: dig row {r}, column {c}.", { r: y + 1, c: x + 1 }));
   sound("hint");
 }
@@ -479,7 +485,7 @@ export function watchReplay(): void {
   game.watch = { commands, i: 0, wait: 0, saved: s };
   game.session = fresh;
   render.loadLevel(game.level);
-  toast(() => tr("Watching replay…"));
+  toast(tr("Watching replay…"));
 }
 function stepWatch(): void {
   const w = game.watch;
@@ -504,13 +510,13 @@ function stopWatch(reopen = false): void {
 export function replayTutorials(): void {
   platform.getDoc().tutorialsDone = [];
   platform.persist();
-  toast(() => tr("Tutorials reset — find them under Learn."));
+  toast(tr("Tutorials reset — find them under Learn."));
 }
 export function eraseProgress(): void {
   platform.eraseAll();
   app.confirmErase = false;
   app.overlays = [];
-  toast(() => tr("Local progress erased."));
+  toast(tr("Local progress erased."));
   showScreen("title", "btn-play");
 }
 
@@ -631,7 +637,7 @@ onStart(() => {
 });
 onPreferencesChange(() => applyPrefs());
 platform.onSettingsChange(() => applyPrefs());
-onSessionEnded(() => { app.signedOut = true; toast(() => pt("signedOut"), 4); });
+onSessionEnded(() => { app.signedOut = true; toast(tr("starhermit.signedOut"), 4); });
 onPlayerChange((p) => { if (p) app.signedOut = false; });
 // Backgrounding pauses the round (the browser build's flow stopped while the tab was hidden).
 onSuspend(() => {
@@ -654,7 +660,6 @@ onUpdate((dt) => {
   applyLook();
   audio.update();
   const t = now();
-  if (app.toast && app.toast.until < t) app.toast = null;
   if (app.caption && app.caption.until < t) app.caption = null;
 });
 onRender(() => {

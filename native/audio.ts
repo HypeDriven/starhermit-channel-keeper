@@ -9,14 +9,12 @@
 // volumes, the mute and the voice limit): music → "music", effects and
 // ambience → "effects". The old default bus levels (music 0.6², effects
 // 0.9², ambience 0.5²: its gains were squared) are folded into each sound's
-// gain. The music and ambience voices, which the browser build made with
-// oscillators and filtered noise, are rendered once into clips (createClip)
-// with the same envelopes; the synthesized stand-ins it played while a
-// sample loaded are not ported (the engine's web runtime drops clip loads
-// while a synthesis graph changes: the arrow-exodus finding). The clips all
-// load at once in onStart; the rendered voices are made one a frame and the
-// sound starts once the mixer runs (in a browser after the first press).
-import { context, createClip, loadClip, play as playClip, type AudioClip, type Sound } from "starhermit:audio";
+// gain. The music and ambience voices are offline graphs rendered once into
+// clips with the same envelopes; the synthesized stand-ins the browser build
+// played while a sample loaded are not ported. The clips load and the voices
+// render at once in onStart; the sound starts once the mixer runs (in a
+// browser after the first press).
+import { OfflineAudioContext, context, createClip, loadClip, play as playClip, type AudioClip, type Sound } from "starhermit:audio";
 import { makeRng } from "../js/rng.js";
 import { N } from "./i18n.ts";
 
@@ -41,6 +39,7 @@ export function loadSfx(): void {
   for (const name of new Set(Object.values(SAMPLES))) {
     loadClip(`sfx/${name}.opus`).then((c) => { clips.set(name, c); }, (e: unknown) => console.warn(`sfx ${name}: ${String(e)}`));
   }
+  void renderVoices().catch((e: unknown) => console.warn(`audio: ${String(e)}`));
 }
 
 /** Plays a logical event's sample. */
@@ -54,58 +53,57 @@ export function event(name: string): void {
 
 // -- rendered voices ------------------------------------------------------------------------
 const RATE = 11025;
-/** js/audio.js _blip's envelope: 0.0001 → peak in 8 ms, back to 0.0001 by `dur`. */
-function env(t: number, peak: number, dur: number): number {
-  if (t < 0 || t > dur) return 0;
-  if (t < 0.008) return 0.0001 * Math.pow(peak / 0.0001, t / 0.008);
-  return peak * Math.pow(0.0001 / peak, (t - 0.008) / (dur - 0.008));
+/** js/audio.js _blip: a voice from 0.0001 to `peak` in 8 ms, back to 0.0001 by `dur`. */
+function blip(off: OfflineAudioContext, type: "sine" | "triangle", f: number, peak: number, dur: number): void {
+  const osc = off.createOscillator();
+  osc.type = type;
+  osc.frequency.value = f;
+  const g = off.createGain();
+  g.gain.setValueAtTime(0.0001, 0);
+  g.gain.exponentialRampToValueAtTime(peak, 0.008);
+  g.gain.exponentialRampToValueAtTime(0.0001, dur);
+  osc.connect(g).connect(off.destination);
+  osc.start();
+  osc.stop(dur);
 }
 /** One music step: a sine at f (2.4 s, 0.035) with a triangle at f / 2 (2.8 s, 0.025). */
-function noteClip(f: number): AudioClip {
-  const n = Math.round(2.85 * RATE);
-  const out = new Float32Array(n);
-  for (let i = 0; i < n; i++) {
-    const t = i / RATE;
-    const ph = ((f / 2) * t) % 1;
-    out[i] = Math.sin(2 * Math.PI * f * t) * env(t, 0.035, 2.4) + (1 - 4 * Math.abs(ph - 0.5)) * env(t, 0.025, 2.8);
-  }
-  return createClip([out], RATE);
+async function renderNote(f: number): Promise<AudioClip> {
+  const off = new OfflineAudioContext(1, Math.round(2.85 * RATE), RATE);
+  blip(off, "sine", f, 0.035, 2.4);
+  blip(off, "triangle", f / 2, 0.025, 2.8);
+  return createClip(await off.startRendering());
 }
-/** The ambience: brown-ish noise lowpassed at 320 Hz at 0.16, its gain swung ±0.05
- * by a 0.07 Hz sine, one swell long (1 / 0.07 s), the loop's ends cross-faded. */
-function ambienceClip(): AudioClip {
-  const n = Math.round(RATE / 0.07), fade = RATE;
-  const raw = new Float32Array(n + fade);
-  const rng = makeRng(0xA0D10, "ambience");
-  let last = 0;
-  for (let i = 0; i < raw.length; i++) { last = (last + 0.02 * (rng.next() * 2 - 1)) / 1.02; raw[i] = last * 3; }
-  // RBJ biquad lowpass, Q 1 (Web Audio's default for a lowpass BiquadFilterNode)
-  const w = (2 * Math.PI * 320) / RATE, alpha = Math.sin(w) / 2, c = Math.cos(w), a0 = 1 + alpha;
-  const b0 = (1 - c) / 2 / a0, b1 = (1 - c) / a0, b2 = b0, a1 = (-2 * c) / a0, a2 = (1 - alpha) / a0;
-  let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
-  for (let i = 0; i < raw.length; i++) {
-    const x0 = raw[i]!;
-    const y0 = b0 * x0 + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
-    x2 = x1; x1 = x0; y2 = y1; y1 = y0;
-    raw[i] = y0;
-  }
-  const out = new Float32Array(n);
-  for (let i = 0; i < n; i++) {
-    let v = raw[i]!;
-    if (i < fade) { const k = i / fade; v = v * k + raw[n + i]! * (1 - k); }
-    out[i] = v * (0.16 + 0.05 * Math.sin((2 * Math.PI * 0.07 * i) / RATE));
-  }
-  return createClip([out], RATE);
+/** The ambience: brown noise lowpassed at 320 Hz, its gain swung ±31 % by a 0.07 Hz sine,
+ * one swell long (1 / 0.07 s), seamless (filtered periodic noise is periodic once settled). */
+const AMBIENCE_GAIN = 0.1311; // measured: rms 0.0273, the old ambience's
+async function renderAmbience(): Promise<AudioClip> {
+  const n = Math.round(RATE / 0.07), settle = Math.round(0.25 * RATE);
+  const off = new OfflineAudioContext(1, settle + n, RATE);
+  const noise = off.createNoise({ color: "brown", seed: 0xA0D10, seconds: n / RATE });
+  const lp = off.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.value = 320;
+  const g = off.createGain();
+  g.gain.value = AMBIENCE_GAIN;
+  const swell = off.createOscillator();
+  swell.frequency.value = 0.07;
+  const depth = off.createGain();
+  depth.gain.value = AMBIENCE_GAIN * (0.05 / 0.16);
+  swell.connect(depth).connect(g.gain);
+  noise.connect(lp).connect(g).connect(off.destination);
+  noise.start();
+  swell.start();
+  const r = await off.startRendering();
+  return createClip([r.getChannelData(0).slice(settle)], RATE);
 }
 
 const SCALE = [220, 262, 294, 330, 392, 440];
 const notes: AudioClip[] = [];
 let ambience: AudioClip | null = null;
-/** One rendered voice a frame, once the samples are in; false when all are made. */
-function renderNext(): boolean {
-  if (notes.length < SCALE.length) { notes.push(noteClip(SCALE[notes.length]!)); return true; }
-  if (!ambience) { ambience = ambienceClip(); return true; }
-  return false;
+/** Every voice, one graph at a time; the ambience last, as update() waits on it. */
+async function renderVoices(): Promise<void> {
+  for (const f of SCALE) notes.push(await renderNote(f));
+  ambience = await renderAmbience();
 }
 
 // -- music and ambience -------------------------------------------------------------------
@@ -113,13 +111,11 @@ const rng = makeRng(0xA0D10, "audio");
 let nextNote = 0;
 let ambSound: Sound | null = null;
 
-/** Each frame once the mixer runs: one rendered voice a frame,
- * then the ambience loop and the music's notes by mixer time. */
+/** Each frame once the mixer runs and the voices are rendered: the ambience loop and the music's notes by mixer time. */
 export function update(): void {
-  if (context.state !== "running") return;
-  try { if (renderNext()) return; } catch (e) { console.warn(`audio: ${String(e)}`); return; }
+  if (context.state !== "running" || !ambience) return;
   const now = context.currentTime;
-  if (!ambSound && ambience) {
+  if (!ambSound) {
     try { ambSound = playClip(ambience, { bus: "effects", gain: 0.0001, loop: true }); ambSound.fade(LEVEL.ambience, 2); }
     catch { ambSound = null; }
     return;

@@ -30,7 +30,7 @@
 | `native/i18n.ts`, `native/style.ts` | Locale from the runtime's interface language; UI theme, tokens and styles (`assets/ui-style.json`) |
 | `js/rules.js`, `js/content.js`, `js/session.js`, `js/rng.js`, `js/storage.js` | The rules engine, content, session, seeded RNG and store, unchanged from the browser build (storage.js only exports `wrap`/`unwrap`) |
 | `js/migrate.js` | Pure save document helpers: normalize, browser-save import, merge, game-setting checks |
-| `js/strings.js`, `js/i18n.js`, `js/platform-strings.js` | Translation tables (classic scripts, `CK_STRINGS` / `CKI18N`) and the account lines |
+| `assets/strings.json` | Translation tables (the engine's `strings`; account lines are its `starhermit.*` keys) |
 | `tools/ui-style.css` → `assets/ui-style.json` | The style sheet, class-based, converted with `starhermit css` (`npm run css`) |
 | `tools/package-web.mjs`, `index.html`, `starhermit-files.json` | `npm run package` writes the engine's web loader and file index (never edited by hand) |
 | `tools/browser-play.mjs` | Plays the web package in headless Chrome at desktop, phone and landscape viewports |
@@ -248,7 +248,7 @@ A level change that alters an asset (detail, material, bevel, grain, boulders) r
 
 Nine locales ship: **en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR, it-IT**.
 
-- **Strings.** Code and content are authored in English and the English text is the lookup key. `js/strings.js` holds one row per key with es-419, de-DE, fr-FR, pt-BR and it-IT; en-GB, es-ES and fr-CA list only their differences (colour, se ha secado, pointage). `tr()` (`native/i18n.ts` → `js/i18n.js`) falls back regional → parent → English and fills `{name}` placeholders; `N()` marks keys translated where shown. Account lines come from `js/platform-strings.js`.
+- **Strings.** Code and content are authored in English and the English text is the lookup key. `assets/strings.json` holds one table per locale, es-419, de-DE, fr-FR, pt-BR and it-IT in full; en-GB, es-ES and fr-CA list only their differences (colour, se ha secado, pointage). `tr()` (`native/i18n.ts`, the engine's `strings`) falls back regional → parent → English and fills `{name}` placeholders; `N()` marks keys translated where shown. Account lines are the engine's `starhermit.*` strings.
 - **Language.** The runtime's interface language (`preferences().language`: the player's choice in Options › Language, else the account's or the device's) mapped to the nearest shipped locale (`es-MX → es-419`, `en-AU → en-GB`, `fr → fr-FR`, `pt-PT → pt-BR`). The UI is rebuilt every frame, so a change shows at once, the round untouched. The game's own Language menu (sh-language.js) is gone.
 - `tests/i18n.test.mjs` collects every key from `native/*.ts` (`tr()`, `N()`) and the content, and fails when a locale lacks one, a translation drops a placeholder, or a table keeps an unused key. Long text wraps (paragraphs, wrapping button rows, auto-fit columns).
 
@@ -275,7 +275,7 @@ The game is an engine script game (`engine.entry=native/main.ts`); browsers open
 | Controls | yes | Ten actions in `starhermit.txt` with gamepad defaults, rebindable in Options; on-screen keys from `bindingLabel` |
 | Clock | yes | `serverTime()` / `serverNow()` date the daily (the device's UTC date until the platform answers) |
 | Invite link | yes | Signed in, **Invite a friend** copies `inviteLink()` to the clipboard with a toast |
-| Platform leaderboard | yes | Signed in, every finished Journey, Daily or Challenge round (not Learn, Practice or an abandoned round) posts its total through `score-script.js` on a practice session (`{type:'result', scores:{'high-score': n}}`) to the `high-score` board (integer, 0–100,000); the results sheet shows "Leaderboard rank: #N" (or posted / not posted) |
+| Platform leaderboard | yes | Signed in, every finished Journey, Daily or Challenge round (not Learn, Practice or an abandoned round) posts its total through `score-script.js` (`leaderboards.submitScore`) to the `high-score` board (integer, 0–100,000); the results sheet shows "Leaderboard rank: #N" (or posted / not posted) |
 | Reports, language, graphics, audio options | runtime | The runtime's Options and report flow replace game-options.js, sh-language.js, ui-scale.js and browser-guard.js |
 | Own-server routes | no | `server.js`'s daily validation/board, telemetry and presence were local-dev routes; the engine client does not call them |
 | Platform achievements | no | Achievements stay local in the save |

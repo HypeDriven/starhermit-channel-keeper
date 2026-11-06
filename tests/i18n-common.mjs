@@ -1,19 +1,10 @@
 // Localization coverage helpers (shared shape across this game's tests).
-import { readFileSync } from 'node:fs';
-import vm from 'node:vm';
 
 export const LOCALES = ['en-US', 'en-GB', 'es-419', 'es-ES', 'de-DE', 'fr-FR', 'fr-CA', 'pt-BR', 'it-IT'];
 export const FULL = ['es-419', 'de-DE', 'fr-FR', 'pt-BR', 'it-IT'];
 
 export const norm = (s) => String(s).replace(/\s+/g, ' ').trim();
 const unq = (s) => s.replace(/\\'/g, "'").replace(/\\"/g, '"');
-
-/** Load the translation tables from a classic-script strings file. */
-export function loadTables(root, file, globalName) {
-  const sandbox = { self: {} };
-  vm.runInNewContext(readFileSync(new URL(file, root), 'utf8'), sandbox);
-  return sandbox.self[globalName];
-}
 
 /** English keys used in code: T('…'), N('…') (deferred), and T(c ? '…' : '…'). */
 export function codeKeys(src, extraFns = [], baseFns = ['T', 'N']) {

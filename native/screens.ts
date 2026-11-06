@@ -14,7 +14,7 @@
 // tall) put the key art beside the title menu. The left-handed setting
 // swaps the rails and the tray's order. The dig face (render.ts) is framed
 // into the play area the rails and tray leave.
-import { frame, openMenu, clipboard } from "starhermit:engine";
+import { frame, openMenu, clipboard, strings } from "starhermit:engine";
 import { bindingLabel } from "starhermit:input";
 import * as draw from "starhermit:draw";
 import * as ui from "starhermit:ui";
@@ -23,25 +23,23 @@ import { TextureLoader, type Texture } from "starhermit:scene";
 import { PHASE } from "../js/rules.js";
 import { ACHIEVEMENTS, CHALLENGES, CONTENT_VERSION, JOURNEY, PRACTICE_DIFFICULTIES, TUTORIALS } from "../js/content.js";
 import { loadBoards } from "../js/storage.js";
-import { N, currentLocale, pt, tr } from "./i18n.ts";
+import { N, tr } from "./i18n.ts";
 import * as platform from "./platform.ts";
 import * as render from "./render.ts";
 import {
   achievements, app, boardRank, cellInfo, closeOverlay, doHint, doRelease, doSkip, doUndo, eraseProgress, explainReason, game,
   goTitle, hasSnapshot, levelGoal, levelName, nextLevel, openLevels, openOverlay, pauseGame, progress, replayTutorials,
   restartRound, resumeGame, resumeSnapshot, leaveRound, settings, showScreen, startDaily, startJourney, startLevel,
-  startPractice, todayKey, toast, topOverlay, tutorialsDone, watchReplay, type Level, type Mode, type OverlayName,
+  startPractice, todayKey, toast, toastUp, topOverlay, tutorialsDone, watchReplay, type Level, type Mode, type OverlayName,
 } from "./main.ts";
 import { COLORS } from "./style.ts";
 
 // ------------------------------------------------------------------ layout
 interface Layout { lw: number; lh: number; sc: number; ox: number; oy: number; wide: boolean; shortLand: boolean; phone: boolean }
 function layoutNow(): Layout {
-  const f = frame();
-  const sc = ui.preferences().scale;
-  const sa = f.safeArea;
-  const lw = Math.max(1, (f.width - sa.left - sa.right) / sc), lh = Math.max(1, (f.height - sa.top - sa.bottom) / sc);
-  return { lw, lh, sc, ox: sa.left / sc, oy: sa.top / sc, wide: lw >= 1024, shortLand: lw > lh && lh <= 540, phone: lw < 600 };
+  const v = ui.viewport!();
+  const sc = v.scale, lw = Math.max(1, v.width), lh = Math.max(1, v.height);
+  return { lw, lh, sc, ox: v.x, oy: v.y, wide: lw >= 1024, shortLand: lw > lh && lh <= 540, phone: lw < 600 };
 }
 const lastHeight = new Map<string, number>();
 
@@ -94,7 +92,7 @@ function rule(w: number): void {
   ui.widget("", { role: "none", size: { width: w, height: 1 }, draw: (r) => draw.rect(r.x, r.y, r.width, Math.max(1, r.height), COLORS.line) });
 }
 // The player's locale; +0 turns a rounded -0 (a zero penalty) into 0.
-const fmtInt = (n: number): string => new Intl.NumberFormat(currentLocale()).format(Math.round(n) + 0);
+const fmtInt = (n: number): string => new Intl.NumberFormat(strings.locale).format(Math.round(n) + 0);
 const keyOf = (action: string): string => bindingLabel(action);
 
 // ------------------------------------------------------------------ art
@@ -192,13 +190,13 @@ function titleScreen(L: Layout): void {
         ? tr("Playing as {name} · {sync}", { name: platform.displayName(), sync: sync === "synced" ? tr("progress synced") : sync === "saving" ? tr("saving…") : tr("cloud sync unavailable") })
         : tr("Playing as guest — progress is stored locally.");
       para(line, mw, "dim-small", "profile-line", true);
-      if (app.signedOut) para(pt("signedOut"), mw, "dim-small", "signed-out", true);
+      if (app.signedOut) para(tr("starhermit.signedOut"), mw, "dim-small", "signed-out", true);
       const plat: Btn[] = [];
       const link = platform.inviteLink();
-      if (link) plat.push({ id: "btn-invite", text: pt("invite"), style: ["btn", "btn-small"], act: () => {
-        try { clipboard.writeText(link); toast(() => pt("inviteCopied")); } catch { toast(() => pt("inviteFailed")); }
+      if (link) plat.push({ id: "btn-invite", text: tr("starhermit.invite"), style: ["btn", "btn-small"], act: () => {
+        try { clipboard.writeText(link); toast(tr("starhermit.inviteCopied")); } catch { toast(tr("starhermit.inviteFailed")); }
       } });
-      if (!platform.signedIn()) plat.push({ id: "btn-signin", text: pt("signIn"), style: ["btn", "btn-small"], act: () => { void requestSignIn().catch(() => undefined); } });
+      if (!platform.signedIn()) plat.push({ id: "btn-signin", text: tr("starhermit.signIn"), style: ["btn", "btn-small"], act: () => { void requestSignIn().catch(() => undefined); } });
       if (plat.length) flow("title-platform", plat, mw, "center");
     };
     if (side) {
@@ -505,7 +503,7 @@ function resultsSheet(L: Layout): void {
     para(bits.join(" "), w, "dim", "results-progress");
     para(boardRank(), w, "dim", "results-compare");
     const lb = app.lb;
-    if (lb) para(lb.pending ? pt("lbPosting") : !lb.posted ? pt("lbNotPosted") : lb.rank ? pt("lbRank", { rank: lb.rank }) : pt("lbPosted"), w, "dim", "results-lb");
+    if (lb) para(tr(lb.pending ? "starhermit.leaderboardPosting" : !lb.posted ? "starhermit.leaderboardNotPosted" : lb.rank ? "starhermit.leaderboardRank" : "starhermit.leaderboardPosted", lb.rank ? { rank: lb.rank } : null), w, "dim", "results-lb");
     const earned = ACHIEVEMENTS.filter((a) => achievements()[a.key]).length;
     if (earned) ui.style("achv-chip").id("results-achv").label(tr("{n} / {total} achievements", { n: earned, total: ACHIEVEMENTS.length }));
     for (const k of app.newly) {
@@ -708,11 +706,7 @@ function feedback(L: Layout, playing: boolean): void {
   const bottom = playing && !L.wide ? 60 + 12 : 16;
   const w = Math.min(L.lw - 32, 560);
   let y = bottom;
-  if (app.toast) {
-    const text = app.toast.text();
-    const r = ui.place("toast", { anchor: "bottom", y: L.oy + y }, () => para(text, w - 40, "body", "toast-text", true), { style: "toast" });
-    y += r.height / L.sc + 8;
-  }
+  if (toastUp()) y += 48; // a one-line toast and its gap
   if (app.caption) {
     const m = /^not allowed: (.+)$/.exec(app.caption.text);
     const text = m ? tr("not allowed: {reason}", { reason: explainReason(m[1]!) }) : tr(app.caption.text);
