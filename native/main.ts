@@ -1,3 +1,4 @@
+import { withLanguageRender as __l10nRender } from "./l10n/menu.ts";
 // Channel Keeper on the StarHermit engine: the entry module (starhermit.txt
 // engine.entry), played natively by the StarHermit client and in browsers by
 // the engine's web runtime. The rules, content, session and the store are
@@ -662,9 +663,13 @@ onUpdate((dt) => {
   const t = now();
   if (app.caption && app.caption.until < t) app.caption = null;
 });
-onRender(() => {
+onRender(__l10nRender(() => {
   drawScreens();
   const s = game.session;
   if (s && app.screen === "play") render.syncState(s.state, s.prev, s.alpha());
   render.update(frameDt);
-});
+}));
+
+// localization-runtime:menu
+import { installLanguageMenu as __installLanguageMenu } from "./l10n/menu.ts";
+__installLanguageMenu(false);
