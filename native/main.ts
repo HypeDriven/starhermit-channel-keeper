@@ -15,7 +15,7 @@ import { withLanguageRender as __l10nRender } from "./l10n/menu.ts";
 // The flow's clock is the runtime's fixed steps (60 a second) fed to
 // Session.advance: a pause, an open sheet or a hidden window never moves the
 // water, and play scripts replay exactly.
-import { frame, levelSettings, onFixedUpdate, onPreferencesChange, onQuit, onRender, onStart, onSuspend, onUpdate, preferences, setFixedRate } from "starhermit:engine";
+import { afterRender, frame, levelSettings, onFixedUpdate, onPreferencesChange, onQuit, onRender, onStart, onSuspend, onUpdate, preferences, setFixedRate } from "starhermit:engine";
 import { onAction, onPointerButton, onPointerMove, onTouch, vibrate } from "starhermit:input";
 import * as ui from "starhermit:ui";
 import { onPlayerChange, onSessionEnded } from "starhermit:platform";
@@ -78,8 +78,20 @@ export function progress(): platform.Doc["progress"] { return platform.getDoc().
 export function tutorialsDone(): string[] { return platform.getDoc().tutorialsDone; }
 export function achievements(): Record<string, number> { return platform.getDoc().achievements as Record<string, number>; }
 export function todayKey(): string { return dailyKey(new Date(platform.nowMs())); }
+let pendingAnnouncement: { text: string; assertive: boolean } | null = null;
 export function announce(msg: string, assertive = false): void {
-  if (msg) ui.announce(msg.slice(0, 500), { politeness: assertive ? "assertive" : "polite" });
+  if (!msg) return;
+  const text = msg.slice(0, 500);
+  if (pendingAnnouncement) {
+    pendingAnnouncement = { text, assertive };
+    return;
+  }
+  pendingAnnouncement = { text, assertive };
+  afterRender(() => {
+    const pending = pendingAnnouncement;
+    pendingAnnouncement = null;
+    if (pending) ui.announce(pending.text, { politeness: pending.assertive ? "assertive" : "polite" });
+  });
 }
 /** A transient toast, one at a time; over a round on a narrow window it stands clear of the action bar. */
 let shownToast: ui.Toast | null = null;

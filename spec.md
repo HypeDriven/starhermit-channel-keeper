@@ -12,7 +12,7 @@
 | Genre | Gravity flow puzzle (falling-sand water on a grid) |
 | Players | 1; asynchronous local score boards |
 | Session | Lessons ~1–2 min; Journey/Daily/Challenge rounds 2–5 min; a title-to-results loop under 90 s on tutorial 1 |
-| Platforms | The StarHermit engine 1.38.0 (host API 1.38): natively in the StarHermit client and in browsers through the engine's web runtime (keyboard, mouse, gamepad, touch), portrait and landscape |
+| Platforms | The StarHermit engine 1.39.0 (host API 1.39): natively in the StarHermit client and in browsers through the engine's web runtime (keyboard, mouse, gamepad, touch), portrait and landscape |
 | Rendering | `starhermit:scene` (three.js-shaped): instanced meshes with WGSL material hooks, ACES tone mapping, image-based light, the runtime's post effects (ambient occlusion, bloom, grade, FXAA/SMAA/MSAA) per graphics level; UI on `starhermit:ui` |
 | Simulation | Fixed 220 ms tick, fully deterministic, replay-hash verified |
 
@@ -20,7 +20,7 @@
 
 | Path | Responsibility |
 |---|---|
-| `starhermit.txt` | Manifest: `launch=index.html`, `engine.entry=native/main.ts`, `engine.version=1.38.0`, `engine.minor=38`, capabilities `platform,storage,clipboard`, `server=score-script.js`, ten `control.*` actions with `engine.gamepad.*` defaults |
+| `starhermit.txt` | Manifest: `launch=index.html`, `engine.entry=native/main.ts`, `engine.version=1.39.0`, `engine.minor=39`, capabilities `platform,storage,clipboard`, `server=score-script.js`, ten `control.*` actions with `engine.gamepad.*` defaults |
 | `native/main.ts` | Entry module: screen flow, cursor and input (actions, pointer, touch), digging/release/undo/hint/fast-forward, replay viewer, lessons, outcomes, boards, snapshot, lifecycle; the flow advances on the runtime's fixed 60 Hz steps |
 | `native/screens.ts` | Every screen, the HUD rails, touch tray, Info drawer, toast/captions and sheets (pause, results, settings, help, achievements, score chase) on `starhermit:ui` |
 | `native/render.ts` | The dig face on `starhermit:scene`: cells, water, spikes, pipe, well, cavern, boulders, cursor, ghost, particles, motes, camera fit/transition/shake, picking, the per-level look |
@@ -255,7 +255,7 @@ Nine locales ship: **en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR, it
 ## 11. Accessibility
 
 - **Keyboard and gamepad:** every screen opens with its first control focused; Tab/arrows move UI focus on menus and sheets; in play the arrows move the board cursor. Sheets are modal dialogs.
-- **Screen reader:** the runtime's announcer (`ui.announce`) speaks level start, cursor moves with the cell ("Row 3 column 4: soil — dig for 1 · 2 water"), digs with row/column and budget, hints, lesson steps, pause/resume, spring dry (polite), and fouling, illegal digs and round end (assertive). Widgets carry their labels (level buttons say name, size, need, complete/locked). The browser build's hidden mirror grid is replaced by these cursor announcements.
+- **Screen reader:** the runtime's announcer (`ui.announce`) speaks level start, cursor moves with the cell ("Row 3 column 4: soil — dig for 1 · 2 water"), digs with row/column and budget, hints, lesson steps, pause/resume, spring dry (polite), and fouling, illegal digs and round end (assertive). Widgets carry their labels (level buttons say name, size, need, complete/locked). The browser build's hidden mirror grid is replaced by these cursor announcements. Announcement bursts coalesce to the latest message per frame so rapid play stays within the engine's announcement budget.
 - **Captions:** every audio event writes a short caption above the toast for 1.8 s.
 - **Contrast and colour:** the runtime's high contrast, five hue palettes (setting), spiked hazards, red/white cursor legality, focus ring `#ffd75e` 3 px.
 - **Motion and text size:** the runtime's reduced motion (§8) and text scale.
@@ -264,7 +264,7 @@ Nine locales ship: **en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR, it
 
 ## 12. StarHermit integration
 
-The game is an engine script game (`engine.entry=native/main.ts`); browsers open the loader `index.html` that `npm run package` writes, which pins engine 1.38.0 on wiki.starhermit.com by hash.
+The game is an engine script game (`engine.entry=native/main.ts`); browsers open the loader `index.html` that `npm run package` writes, which pins engine 1.39.0 on wiki.starhermit.com by hash.
 
 | Feature | Used | How |
 |---|---|---|

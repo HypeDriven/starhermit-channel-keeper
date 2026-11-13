@@ -19,7 +19,7 @@
     "assets/well-filled.webp": {"sha256": "77b14b16efd664e6740b5678e6ef6d2d64417da0e9251e078f527a7ad5858d27", "size": 12834},
     "cover.jpg": {"sha256": "00001e014acd8471316efd06a0e400b3b11886e44d7b235ac79382fe6720ad79", "size": 348925},
     "icon.png": {"sha256": "30cef2ad9f0c53c3b8607ab22ac965b97d14e771987435ec4d8c757ecfd56a28", "size": 9848},
-    "index.html": {"sha256": "d5c4ae0788b1bf2f22ce6d6d475ae2378589573f9dbb08cdf519f03b25d2fe88", "size": 1942},
+    "index.html": {"sha256": "1ebb338b4a21d8fb2524187b9b8431b284f1f044693f1f883099440704c6dbd9", "size": 1942},
     "js/content.js": {"sha256": "d0de00ce613996a3d96f4286b38b9627245fdfb311d0800334e7117d3de02b96", "size": 23061},
     "js/migrate.js": {"sha256": "24f0f9abd7a6ab5e85aac4d1b5a353c0d1a4631088c4f3ad2a73255af00dc71c", "size": 5364},
     "js/rng.js": {"sha256": "e75bfb7794181849ebe296cf778ffc72d64312b09763d41e0dd2405e026dc251", "size": 1741},
@@ -30,12 +30,13 @@
     "native/i18n.ts": {"sha256": "ad4e3e60eadcf2b614b414647a5768c7a6a04e9084701b2c20c58341f8b402ae", "size": 1056},
     "native/l10n/font.ts": {"sha256": "7f1628951943bd20cc3afa3ead0ad5ef2b5d9415683a7bd74953a40cbf5fd142", "size": 6298},
     "native/l10n/menu.ts": {"sha256": "fc100eedcc093719d7aadf6e211916bdbd3787b4e7be5866978bb36b3a1570af", "size": 6317},
-    "native/main.ts": {"sha256": "e6e76c447136f6e00b1fdc57be365a1331af4e708baa7e9eaaaf228dd40b850d", "size": 28379},
+    "native/main.ts": {"sha256": "afa245caa222de595d85177b116ae34e7b10bf1774162646a6ef2bcbdcd49a9b", "size": 28770},
     "native/platform.ts": {"sha256": "9bfd3709428364e4c23c196c45aa1e5270324b7df3cf70a50f1d12edac5c7421", "size": 9809},
     "native/quality.ts": {"sha256": "9d050a7a226ad38e76e2a892863a056c1245042e063e9f2c3784f48e182ab106", "size": 4447},
     "native/render.ts": {"sha256": "301a0d5828d046074b2af95520c29216b2398d459f0037c27141ba46a577729d", "size": 36975},
     "native/screens.ts": {"sha256": "261414a408b62a7959414be0e183af9884fe983ca48c5c2d3908c76a24592206", "size": 43878},
     "native/style.ts": {"sha256": "9b677af2a11b5ee7b24c9be101fb0a865b0813f60c5521a2852c27e96e5f8433", "size": 2156},
+    "publication.json": {"sha256": "974fb19a75e137f4d5faf5af18cf9e1f9cb51bda8c46069932725c99aebff9a7", "size": 3226},
     "score-script.js": {"sha256": "4133359e8234cac920651c89f79485aa401cdca970720662e50150de4431f600", "size": 2487},
     "sfx/achievement-chime.opus": {"sha256": "ca1e9b5de44f5d2ba7603fe452893e1ee3858f630de54652634c3dccc97cddcf", "size": 28974},
     "sfx/deny-buzz.opus": {"sha256": "745cd0ae4889f191d0040da2589ad703aca345ab0e93f3ee0cead2767db7be11", "size": 11688},
@@ -57,7 +58,7 @@
     "sfx/water-release.opus": {"sha256": "2f9aaf0cda179e353a4192f47701dfbe705408eab847148d871b4ac3407e575e", "size": 23232},
     "sfx/water-splash.opus": {"sha256": "38fdb8d2c09cdb44eaf6ba5208feacdeb3debd24b68a6960d38baa681ae04ea8", "size": 18544},
     "sfx/well-fill.opus": {"sha256": "63b33aa88d7e1498a81c8f5a878e8948c378d4a153e589e9114e6bb43faa2d57", "size": 21396},
-    "starhermit.txt": {"sha256": "76d9da3bbdfc258d3365abcca74c68144eb61892732087c3d63cb6c1dee1db2e", "size": 1939}
+    "starhermit.txt": {"sha256": "63262f67efdb073c8416ebbc54b6e8b18baa00826a98c1f63f3d21f1be825a2c", "size": 1939}
   },
   "excluded": ["coverart.png", "knownissues.md", "node_modules/", "package-lock.json", "package.json", "server.js", "spec.md", "test-results/", "tests/", "tools/", "tsconfig.json"],
   "format": 1
