@@ -1,3 +1,4 @@
+import { bindings } from "starhermit:input";
 import { localizedStyle as __l10nStyle } from "./l10n/font.ts";
 // localization-runtime:attached
 import { openLocalizedOptions as __l10nOptions } from "./l10n/menu.ts";
@@ -136,7 +137,7 @@ function artImage(tex: Texture, w: number, h: number, cls: string): void {
 }
 
 // ------------------------------------------------------------------ the frame
-export function drawScreens(): void {
+function drawScreensImmediate(): void {
   loadArt();
   const L = layoutNow();
   const f = frame();
@@ -731,4 +732,11 @@ function feedback(L: Layout, playing: boolean): void {
     const text = m ? tr("not allowed: {reason}", { reason: explainReason(m[1]!) }) : tr(app.caption.text);
     ui.place("captions", { anchor: "bottom", y: L.oy + y + 8 }, () => para(text, w, "captions", "caption-text", true));
   }
+}
+
+export function drawScreens(): void {
+  if (!(topOverlay() === "help")) { drawScreensImmediate(); return; }
+  const actions = ["up","down","left","right","carve","release","undo","hint","camera","pause"];
+  const version = JSON.stringify([(app as any).settings ?? (app as any).options ?? {}, (platform as any).options ?? {}, actions.map((action) => bindings(action))]);
+  ui.retain!("help-screen", version, drawScreensImmediate);
 }
