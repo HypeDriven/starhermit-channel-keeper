@@ -12,7 +12,7 @@
     "metadataSource": "starhermit.txt",
     "createdAt": "2026-09-01T07:00:58.974908+00:00",
     "coverArtSource": "manifest",
-    "coverArtUpdatedAt": "2026-11-23T17:01:25.120363+00:00",
+    "coverArtUpdatedAt": "2026-11-26T11:45:25.681337+00:00",
     "submittedByUserId": "2712e04e-461b-4d23-81ae-e40b429128a8",
     "submittedByUsername": "starhermit",
     "hosting": {
@@ -22,9 +22,9 @@
       "pinnedCommitSha": null,
       "deployedCommitSha": null,
       "deployError": null,
-      "deployedAt": "2026-11-23T17:01:25.110185+00:00",
+      "deployedAt": "2026-11-26T11:45:25.667766+00:00",
       "externalLaunchUrl": null,
-      "engineVersion": "1.47.0",
+      "engineVersion": "1.50.0",
       "deployWarning": null
     },
     "description": "Dig channels to guide spring water into a well while avoiding contamination and conserving your dig budget.",
@@ -36,19 +36,19 @@
     "links": [],
     "isDisabled": false
   },
-  "publishedAt": "2026-11-23T17:01:25.239Z",
-  "sourceCommit": "66ff3f314e6de3d327d7d0e01dd5978b79b09a1d",
-  "bytesReceived": 3083171,
-  "archiveSha256": "0a2133852c2c22f9a87c4814af28f7d6999f0f0306be92b1881127ea4a85e00b",
+  "publishedAt": "2026-11-26T11:45:25.812Z",
+  "sourceCommit": "7be6a9d3a9b21cdfc5a885a7f3eded70eb391442",
+  "bytesReceived": 3083198,
+  "archiveSha256": "3dce873a68995ddb8307cef698e223eae3cb2b8e1f6fe8ae452d83573f9dcff7",
   "indexSha256": "55766fc2ef3b8ec2f3c6a3dedd3dbe4fa465a6275eda75371bef2eed32f0ee80",
   "result": {
     "clientPublished": true,
     "serverImageLoaded": false,
     "imageDigest": null,
-    "bytesReceived": 3083171,
+    "bytesReceived": 3083198,
     "mode": "replace",
     "filesRemoved": 0,
-    "engineVersion": "1.47.0",
+    "engineVersion": "1.50.0",
     "deployWarning": null
   },
   "liveVerification": {
