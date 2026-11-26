@@ -40,6 +40,7 @@ import {
 } from "starhermit:scene";
 import type { Material, MaterialHooks, Object3D, Texture } from "starhermit:scene";
 import { OffscreenCanvas } from "starhermit:canvas";
+import { frame as engineFrame } from "starhermit:engine";
 import { CELL, CELL_CAP } from "../js/rules.js";
 import { getTheme } from "../js/content.js";
 import { makeRng } from "../js/rng.js";
@@ -88,13 +89,16 @@ fn surface(s: Surface) -> Surface {
   return o;
 }`,
 };
-const waterUniforms = { uTime: { value: 0 }, uWaterAnim: { value: 1 } };
+// The ripple's clock is the engine's (frame_time(), host API 1.49) less uOffset, held at uFrozen
+// while the board is hidden or motion is reduced; the uniforms change only when that does.
+const waterUniforms = { uRun: { value: 0 }, uOffset: { value: 0 }, uFrozen: { value: 0 }, uWaterAnim: { value: 1 } };
 const waterHooks: MaterialHooks = {
   uniforms: waterUniforms,
   surface: `
 fn surface(s: Surface) -> Surface {
   var o = s;
-  let ripple = 0.5 + 0.5 * sin(s.world.y * 7.0 + uniforms.uTime * 5.0 + sin(s.world.x * 3.0 + uniforms.uTime * 1.7) * 1.5);
+  let t = select(uniforms.uFrozen, frame_time() - uniforms.uOffset, uniforms.uRun > 0.5);
+  let ripple = 0.5 + 0.5 * sin(s.world.y * 7.0 + t * 5.0 + sin(s.world.x * 3.0 + t * 1.7) * 1.5);
   let glow = 0.34 + uniforms.uWaterAnim * 0.2 * ripple;
   o.emissive = s.emissive + s.color.rgb * glow;
   return o;
@@ -191,6 +195,8 @@ const key = new DirectionalLight(0xffeedd, 3.0);
 const hemi = new HemisphereLight(0x9fb8d8, 0x2a2018, 0.9);
 const boardGroup = new Group();
 const envGroup = new Group();
+// The cavern wall, floor and boulders never move: still scenery (host API 1.49 STATIC_SYNC).
+envGroup.movable = false;
 const fxGroup = new Group();
 let built = false;
 let look: Look | null = null;
@@ -297,6 +303,7 @@ export function loadLevel(lv: Level): void {
   cellMesh.customSlots = 1;
   cellMesh.receiveShadow = true;
   cellMesh.castShadow = true;
+  cellMesh.movable = false; // its instances change only with the cells (STATIC_INSTANCES)
   boardGroup.add(cellMesh);
   decor = [];
   for (let i = 0; i < n; i++) decor.push(rng.next());
@@ -316,6 +323,7 @@ export function loadLevel(lv: Level): void {
     const spikeMat = lit({ color: colorOf("contam"), roughness: 0.3, metalness: 0.2, emissive: colorOf("contam"), emissiveIntensity: 0.35 });
     const spikes = new InstancedMesh(new ConeGeometry(0.16, 0.5, 5), spikeMat, contamCount * 3);
     spikes.castShadow = true;
+    spikes.movable = false;
     let k = 0;
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
       if (lv.cells[y * w + x] !== CELL.CONTAM) continue;
@@ -342,6 +350,7 @@ export function loadLevel(lv: Level): void {
       pipe.position.set(wx, wy + 0.4, 0.45);
       pipe.rotation.x = PI / 2.4;
       pipe.castShadow = true;
+      pipe.movable = false;
       boardGroup.add(pipe);
       const lip = new Mesh(new TorusGeometry(0.33, 0.06, 10, 28), new MeshStandardMaterial({ color: 0x6c7682, roughness: 0.45, metalness: 0.9 }));
       lip.position.set(0, 0.42, 0);
@@ -782,16 +791,25 @@ export function setPalette(p: string, contrast: boolean): void {
 export function setVisible(on: boolean): void {
   if (!built) setup();
   renderer.camera = on && level ? camera : null;
+  if (!renderer.camera) runWater(false);
 }
 
 // --- per frame ----------------------------------------------------------------------------------
+/** Starts the water's ripple clock where it was held, or holds it. */
+function runWater(run: boolean): void {
+  if ((waterUniforms.uRun.value > 0.5) === run) return;
+  const now = engineFrame().time;
+  if (run) waterUniforms.uOffset.value = now - waterUniforms.uFrozen.value;
+  else waterUniforms.uFrozen.value = now - waterUniforms.uOffset.value;
+  waterUniforms.uRun.value = run ? 1 : 0;
+}
 let clock = 0;
 /** Advances the cosmetics; `dt` seconds. */
 export function update(dtRaw: number): void {
   if (!built || !look || !level || !renderer.camera) return;
   const dt = Math.min(0.1, Math.max(0, dtRaw));
   clock += dt;
-  if (!reducedMotion) waterUniforms.uTime.value += dt;
+  runWater(!reducedMotion);
   camera.aspect = winW / winH;
   const cx = free.x + free.w / 2, cy = free.y + free.h / 2;
   camera.setViewOffset(winW, winH, winW / 2 - cx, winH / 2 - cy, winW, winH);

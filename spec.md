@@ -339,10 +339,14 @@ The string tables include complete regional variants for `fr-BE`, `de-BE`, `en-S
 
 ## Engine 1.50.0
 
-Browser play uses the WebGPU-only StarHermit 1.50.0 web runtime. Automatic ray-traced shadows are enabled on supported Vulkan devices, with mapped-shadow fallbacks elsewhere. Packaging creates block-compressed runtime textures and compressed glTF copies, retaining original image fallbacks.
+Browser play uses the StarHermit 1.50.0 web runtime on WebGPU, or WebGL 2 where WebGPU is missing. Automatic ray-traced shadows are enabled on supported Vulkan devices, with mapped-shadow fallbacks elsewhere. Packaging creates block-compressed runtime textures and compressed glTF copies, retaining original image fallbacks.
 
 The help screen replays through retained native UI while its contents, options, layout and key bindings are unchanged.
 
 Browser rendering uses the engine's asynchronous pipeline creation so newly encountered materials do not stall the page. Native play retains the engine's synchronous pipeline behavior.
+
+**Frame rate (host API 1.49 `setTargetFps`).** The game caps itself at 30 frames a second on the title (a flat screen; the board is not drawn) and, under a finger (`primaryPointer() === "coarse"`), on the phone graphics levels (`levelIndex` ≤ 3), where steady 33 ms frames replace 33/50 ms jitter; elsewhere there is no game cap. The flow stays on its fixed steps whatever the frame rate. The engine sets the cap aside while its menus are open, and the player's Frame rate limit still applies.
+
+**Still scenery and the engine clock (host API 1.49).** The cavern wall, floor and boulders, the cell blocks (whose instances change only when a cell does), the foul-pocket spikes and the spring's pipe are `movable = false`. The water's ripple runs on the engine's `frame_time()` less an offset, held while the board is hidden or motion is reduced, so its material is sent only when the ripple starts or holds, not every frame. The water fill, the well's ring and the effects stay movable.
 
 Higher graphics tiers use native per-object motion blur for moving pieces and effects. Camera motion stays sharp, lower tiers omit the effect, and the runtime's Motion blur and Reduce motion preferences remain authoritative.

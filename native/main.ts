@@ -16,8 +16,8 @@ import { withLanguageRender as __l10nRender } from "./l10n/menu.ts";
 // The flow's clock is the runtime's fixed steps (60 a second) fed to
 // Session.advance: a pause, an open sheet or a hidden window never moves the
 // water, and play scripts replay exactly.
-import { afterRender, frame, levelSettings, onFixedUpdate, onPreferencesChange, onQuit, onRender, onStart, onSuspend, onUpdate, preferences, setFixedRate } from "starhermit:engine";
-import { onAction, onPointerButton, onPointerMove, onTouch, vibrate } from "starhermit:input";
+import { afterRender, frame, levelSettings, onFixedUpdate, onPreferencesChange, onQuit, onRender, onStart, onSuspend, onUpdate, preferences, setFixedRate, setTargetFps } from "starhermit:engine";
+import { onAction, onPointerButton, onPointerMove, onTouch, primaryPointer, vibrate } from "starhermit:input";
 import * as ui from "starhermit:ui";
 import { onPlayerChange, onSessionEnded } from "starhermit:platform";
 import { CELL, PHASE } from "../js/rules.js";
@@ -99,7 +99,7 @@ let shownToast: ui.Toast | null = null;
 export function toast(text: string, seconds = 2.6): void {
   shownToast?.dismiss();
   const offset = app.screen === "play" && ui.viewport!().width < 1024 ? 56 : 0; // the old distance from the edge − the stack's 16
-  shownToast = ui.toast!(text, { duration: seconds, style: ["toast", "toast-text"], dismissible: false, announce: false, offset });
+  shownToast = ui.toast!(text, { duration: seconds, style: "toast", dismissible: false, announce: false, offset });
 }
 /** Whether a toast is up (the caption line stands above it). */
 export function toastUp(): boolean { return !!shownToast?.queued; }
@@ -669,10 +669,23 @@ onFixedUpdate(() => {
   if (!app.overlays.length) s.advance(STEP_MS);
 });
 
+/** The game's frame cap (host API 1.49 setTargetFps, set only on a change): 30 on the title (a flat
+ * screen: the board is not drawn) and on phone levels (levelIndex <= 3) under a finger, where steady
+ * 33 ms frames beat 33/50 ms jitter; none otherwise. The engine sets it aside while its menus are
+ * open, and the player's frame-rate limit still applies. */
+let frameCap = -1;
+function capFrames(): void {
+  const cap = app.screen === "title" || (frame().levelIndex <= 3 && primaryPointer() === "coarse") ? 30 : 0;
+  if (cap === frameCap) return;
+  frameCap = cap;
+  setTargetFps(cap || null);
+}
+
 let frameDt = 0;
 onUpdate((dt) => {
   frameDt = dt;
   applyLook();
+  capFrames();
   audio.update();
   const t = now();
   if (app.caption && app.caption.until < t) app.caption = null;
