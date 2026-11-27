@@ -12,7 +12,7 @@
 | Genre | Gravity flow puzzle (falling-sand water on a grid) |
 | Players | 1; asynchronous local score boards |
 | Session | Lessons ~1–2 min; Journey/Daily/Challenge rounds 2–5 min; a title-to-results loop under 90 s on tutorial 1 |
-| Platforms | The StarHermit engine 1.51.0 (host API 1.51): natively in the StarHermit client and in browsers through the engine's web runtime (keyboard, mouse, gamepad, touch), portrait and landscape |
+| Platforms | The StarHermit engine 1.52.0 (host API 1.52): natively in the StarHermit client and in browsers through the engine's web runtime (keyboard, mouse, gamepad, touch), portrait and landscape |
 | Rendering | `starhermit:scene` (three.js-shaped): instanced meshes with WGSL material hooks, ACES tone mapping, image-based light, the runtime's post effects (ambient occlusion, bloom, grade, FXAA/SMAA/MSAA) per graphics level; UI on `starhermit:ui` |
 | Simulation | Fixed 220 ms tick, fully deterministic, replay-hash verified |
 
@@ -20,7 +20,7 @@
 
 | Path | Responsibility |
 |---|---|
-| `starhermit.txt` | Manifest: `launch=index.html`, `engine.entry=native/main.ts`, `engine.version=1.51.0`, `engine.minor=51`, capabilities `platform,storage,clipboard`, `server=score-script.js`, ten `control.*` actions with `engine.gamepad.*` defaults |
+| `starhermit.txt` | Manifest: `launch=index.html`, `engine.entry=native/main.ts`, `engine.version=1.52.0`, `engine.minor=52`, capabilities `platform,storage,clipboard`, `server=score-script.js`, ten `control.*` actions with `engine.gamepad.*` defaults |
 | `native/main.ts` | Entry module: screen flow, cursor and input (actions, pointer, touch), digging/release/undo/hint/fast-forward, replay viewer, lessons, outcomes, boards, snapshot, lifecycle; the flow advances on the runtime's fixed 60 Hz steps |
 | `native/screens.ts` | Every screen, the HUD rails, touch tray, Info drawer, toast/captions and sheets (pause, results, settings, help, achievements, score chase) on `starhermit:ui` |
 | `native/render.ts` | The dig face on `starhermit:scene`: cells, water, spikes, pipe, well, cavern, boulders, cursor, ghost, particles, motes, camera fit/transition/shake, picking, the per-level look |
@@ -264,7 +264,7 @@ Nine locales ship: **en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR, it
 
 ## 12. StarHermit integration
 
-The game is an engine script game (`engine.entry=native/main.ts`); browsers open the loader `index.html` that `npm run package` writes, which pins engine 1.51.0 on wiki.starhermit.com by hash.
+The game is an engine script game (`engine.entry=native/main.ts`); browsers open the loader `index.html` that `npm run package` writes, which pins engine 1.52.0 on wiki.starhermit.com by hash.
 
 | Feature | Used | How |
 |---|---|---|
@@ -337,16 +337,16 @@ The string tables include complete regional variants for `fr-BE`, `de-BE`, `en-S
 
 <!-- regional-localization:end -->
 
-## Engine 1.51.0
+## Engine 1.52.0
 
-Browser play uses the StarHermit 1.51.0 web runtime on WebGPU, or WebGL 2 where WebGPU is missing. Automatic ray-traced shadows are enabled on supported Vulkan devices, with mapped-shadow fallbacks elsewhere. Packaging creates block-compressed runtime textures and compressed glTF copies, retaining original image fallbacks.
+Browser play uses the StarHermit 1.52.0 web runtime on WebGPU, or WebGL 2 where WebGPU is missing. Automatic ray-traced shadows are enabled on supported Vulkan devices, with mapped-shadow fallbacks elsewhere. Packaging creates block-compressed runtime textures and compressed glTF copies, retaining original image fallbacks.
 
 The help screen replays through retained native UI while its contents, options, layout and key bindings are unchanged.
 
 Browser rendering uses the engine's asynchronous pipeline creation so newly encountered materials do not stall the page. Native play retains the engine's synchronous pipeline behavior.
 
-**Frame rate (host API 1.51 `setTargetFps`).** The game caps itself at 30 frames a second on the title (a flat screen; the board is not drawn) and, under a finger (`primaryPointer() === "coarse"`), on the phone graphics levels (`levelIndex` ≤ 3), where steady 33 ms frames replace 33/50 ms jitter; elsewhere there is no game cap. The flow stays on its fixed steps whatever the frame rate. The engine sets the cap aside while its menus are open, and the player's Frame rate limit still applies.
+**Frame rate (host API 1.52 `setTargetFps`).** The game caps itself at 30 frames a second on the title (a flat screen; the board is not drawn) and, under a finger (`primaryPointer() === "coarse"`), on the phone graphics levels (`levelIndex` ≤ 3), where steady 33 ms frames replace 33/50 ms jitter; elsewhere there is no game cap. The flow stays on its fixed steps whatever the frame rate. The engine sets the cap aside while its menus are open, and the player's Frame rate limit still applies.
 
-**Still scenery and the engine clock (host API 1.51).** The cavern wall, floor and boulders, the cell blocks (whose instances change only when a cell does), the foul-pocket spikes and the spring's pipe are `movable = false`. The water's ripple runs on the engine's `frame_time()` less an offset, held while the board is hidden or motion is reduced, so its material is sent only when the ripple starts or holds, not every frame. The water fill, the well's ring and the effects stay movable.
+**Still scenery and the engine clock (host API 1.52).** The cavern wall, floor and boulders, the cell blocks (whose instances change only when a cell does), the foul-pocket spikes and the spring's pipe are `movable = false`. The water's ripple runs on the engine's `frame_time()` less an offset, held while the board is hidden or motion is reduced, so its material is sent only when the ripple starts or holds, not every frame. The water fill, the well's ring and the effects stay movable.
 
 Higher graphics tiers use native per-object motion blur for moving pieces and effects. Camera motion stays sharp, lower tiers omit the effect, and the runtime's Motion blur and Reduce motion preferences remain authoritative.
